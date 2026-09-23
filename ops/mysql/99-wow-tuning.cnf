@@ -1,0 +1,16 @@
+# MySQL tuning for the custom-wow server (AzerothCore + mod-playerbots at 500-2000 bots).
+# Install: sudo cp /opt/wow/mysql/99-wow-tuning.cnf /etc/mysql/mysql.conf.d/
+# Apply only with the worldserver stopped:
+#   sudo systemctl stop wow-world && sudo systemctl restart mysql && sudo systemctl start wow-world
+# Values follow the mod-playerbots Installation Guide. Stock on 2026-09-14: 128M buffer pool,
+# binary log on, REPEATABLE-READ, io_capacity 200, flush_log_at_trx_commit 1.
+[mysqld]
+# No replication here; the binary log is pure write overhead.
+disable_log_bin
+# Hot game tables stay in memory. The box has ~47 GB free next to the LLM models.
+innodb_buffer_pool_size = 8G
+innodb_io_capacity = 500
+transaction_isolation = READ-COMMITTED
+# Flush the redo log once a second instead of per commit: bot saves stop waiting on fsync.
+# Cost: an OS crash or power loss can drop the last ~1 s of saves. MySQL crashing alone loses nothing.
+innodb_flush_log_at_trx_commit = 2

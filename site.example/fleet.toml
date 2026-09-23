@@ -1,0 +1,94 @@
+# fleet.toml — the model servers this realm can reach (plan 23 W3).
+#
+# Copy to site/fleet.toml and edit. Nothing here is a hostname the code knows: the services ask this
+# file by ROLE ("give me a writer", "give me the judge"), so a realm with one GPU and a realm with five
+# run the same code.
+#
+# The profile below is the single-endpoint one: one llama-server, one Qwen3 14B-class instruct model.
+# It is what the clean-room setup is tested against, and it is enough to run a realm.
+
+[router]
+# Where mod-ollama-chat sends its generations. The module knows only this address.
+bind = "127.0.0.1"
+port = 11434
+# Seconds a request waits for a busy backend before failing over to the next in its route.
+queue_wait = 20
+
+# --- the machines -----------------------------------------------------------
+# One entry per SERVER, not per route: the concurrency caps below only hold if a machine is described
+# once and shared. Two entries for one machine get two separate caps, and the cap stops meaning anything.
+#
+#   url            OpenAI-compatible base; /v1/chat/completions is appended.
+#   model          what the backend is told. llama-server ignores it; LM Studio and OpenRouter do not.
+#   router_slots   how many live-chat requests may be in flight. Live chat is latency-bound.
+#   batch_slots    how many batch-generation requests may be in flight. Batch is throughput-bound.
+#                  These are deliberately different numbers for the same machine: leave room for chat.
+#   router_timeout seconds a live-chat request may take. Short: someone is waiting for the line.
+#   batch_timeout  seconds a batch generation may take. Minutes: a backstory is not a chat message.
+#                  Two numbers for the same machine, for the same reason as the two slot counts. The
+#                  router's chat-sized timeout is what stops batch work going through the router at all.
+#   kinds          which batch work this machine may take: guild, character, rag, traits.
+#                  A slow machine should not take "guild" -- one long JSON holds up a whole roster.
+#   lmstudio       true for LM Studio, which rejects response_format json_object with HTTP 400 and
+#                  needs json_schema instead.
+#   system_suffix  appended to the system prompt for this backend only (e.g. "/no_think" for Qwen3
+#                  where the server ignores chat_template_kwargs and would otherwise return empty).
+
+[backends.local]
+url = "http://127.0.0.1:8080"
+model = "qwen3-14b"
+router_slots = 4
+batch_slots = 2
+timeout = 90
+kinds = ["guild", "character", "rag", "traits"]
+
+# A second machine looks like this. Delete it if you have one GPU.
+# [backends.spare]
+# url = "http://192.168.1.50:8091"
+# model = "qwen3-next-80b"
+# router_slots = 2
+# batch_slots = 1
+# timeout = 120
+# kinds = ["character", "rag", "traits"]
+
+# An OpenAI-compatible paid API, used only where it is named in a route below. The key is
+# OPENROUTER_API_KEY in site/secrets.env; without it these entries are skipped silently.
+# [backends.remote]
+# url = "https://openrouter.ai/api/v1"
+# model = "anthropic/claude-haiku-4.5"
+# api_key_env = "OPENROUTER_API_KEY"
+# router_slots = 4
+# batch_slots = 0
+# timeout = 60
+
+# --- live chat routes -------------------------------------------------------
+# Order is failover order. The first backend with a free slot answers.
+#
+#   ambient    idle chatter and events. The most traffic by far; put your fastest machine first.
+#   quality    lines addressed to a person. Worth a better model.
+#   chronicle  the chronicler's day-books. Long, infrequent, not latency-sensitive.
+#   prose      backstories and other long writing.
+#   utility    classification and judging. Short, fast, JSON.
+#   moment     the rare line that should be the best you can serve.
+
+[routes]
+ambient   = ["local"]
+quality   = ["local"]
+chronicle = ["local"]
+prose     = ["local"]
+utility   = ["local"]
+moment    = ["local"]
+
+# --- batch lanes ------------------------------------------------------------
+# Which machines batch lore generation may use, and in what order it prefers them. Batch work runs
+# outside the router, because the router's chat-sized timeouts cut long generations off.
+[batch]
+lanes = ["local"]
+
+# --- the judge --------------------------------------------------------------
+# A second opinion on whether a generated text belongs to the era. Fast, short, JSON, and optional:
+# when it cannot be reached the callers fall back to their regex and say so once.
+[judge]
+backend = "local"
+slots = 3
+timeout = 60

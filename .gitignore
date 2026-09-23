@@ -1,0 +1,24 @@
+# The client, and anything extracted from it, never goes in git.
+client/*
+!client/README.txt
+
+# This machine's answers: site.env, secrets.env, fleet.toml, the setup state file.
+# The templates in site.example/ ARE tracked; nothing under site/ ever is.
+site/
+
+# Generated at runtime
+*.log
+logs/
+__pycache__/
+*.pyc
+services/lore/review-*.jsonl
+services/regard/review-*.jsonl
+services/regard/PAUSE
+services/regard/NO_*
+services/regard/founding.lock
+services/regard/presence-state.json
+
+# Full live configs carry secrets; only the redacted conf/*.overrides are tracked
+*.conf
+!ops/**/*.conf
+!site.example/*.env

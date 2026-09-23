@@ -1,0 +1,10 @@
+[Unit]
+Description=Memory archiver: a permanent copy of bot memories, which the live table evicts (plans/41)
+
+[Service]
+ExecStart=/usr/bin/python3 @REPO@/services/memory/archive.py run --interval 60
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target

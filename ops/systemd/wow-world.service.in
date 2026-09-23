@@ -1,0 +1,22 @@
+[Unit]
+Description=AzerothCore worldserver (playerbots + ollama-chat)
+After=network-online.target mysql.service wow-auth.service
+Wants=network-online.target mysql.service
+
+[Service]
+Type=simple
+User=@WOW_USER@
+Group=@WOW_USER@
+WorkingDirectory=@SERVER_PREFIX@/bin
+ExecStart=@SERVER_PREFIX@/bin/worldserver
+# Console.Enable = 0 in worldserver.conf (there is no tty under systemd); reach it over RA instead,
+# on RA_HOST:RA_PORT from site.env. ".server restart" exits non-zero and so is restarted by Restart=;
+# ".server shutdown" exits 0 and stays down. That difference is the only stop/restart control you have.
+Restart=on-failure
+RestartSec=10
+# The world saves every character on the way down. Killing it early loses the unsaved ones.
+TimeoutStopSec=180
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

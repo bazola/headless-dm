@@ -1,0 +1,21 @@
+[Unit]
+Description=Lore gate: a player writes their own lore, and the world checks it (plans/28)
+After=network-online.target
+
+[Service]
+WorkingDirectory=@REPO@/services/lore
+# LORE_GATE_TOKEN lives in site/secrets.env with every other secret (plan 23 W15), along with the
+# optional LORE_GATE_BIND / PORT / ORIGIN / ACCOUNTS / SKIP_ACCOUNTS in site/site.env.
+#
+# This used to point at ~/.config/custom-wow/lore_gate.env, on the reasoning that anything under the
+# repo would be committed. That reasoning is no longer true: site/ is git-ignored, and `git check-ignore`
+# is run against site/secrets.env before a secret is ever written into it. One place for secrets beats
+# two, and a backup that captures site/ now captures the gate's token with it.
+EnvironmentFile=-@SITE_DIR@/secrets.env
+EnvironmentFile=-@SITE_DIR@/site.env
+ExecStart=/usr/bin/python3 @REPO@/services/lore/lore_gate.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

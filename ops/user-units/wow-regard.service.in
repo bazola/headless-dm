@@ -1,0 +1,10 @@
+[Unit]
+Description=Regard scorer: what every bot feels about everyone it has met (plans/14)
+
+[Service]
+ExecStart=/usr/bin/python3 @REPO@/services/regard/regard.py run --interval 120
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target

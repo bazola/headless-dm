@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up the realm: the four databases, site/ and the live configs (plan 23 W13)
+Documentation=file://%h/dev/custom-wow/docs/GUIDE.md
+
+[Service]
+Type=oneshot
+# @REPO@ is filled in by ops/systemd/install.sh from site.env (W6). Until then, edit it by hand.
+ExecStart=@REPO@/ops/scripts/backup.sh
+# Backups are heavy on disk and on the database; never let one compete with someone playing.
+Nice=10
+IOSchedulingClass=idle

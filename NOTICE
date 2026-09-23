@@ -1,0 +1,49 @@
+Headless DM
+Copyright (c) 2026 Bazola
+Licensed under the MIT License; see LICENSE.
+
+The services, ops scripts, SQL and documentation in this repository are
+separate programs. They talk to the server over MySQL and HTTP and are not
+linked into it, so they keep their MIT terms.
+
+Third-party material
+--------------------
+
+Loaded at runtime from third-party CDNs, never vendored in this repository:
+
+    Leaflet 1.9.4 — BSD-2-Clause
+    Cinzel, Inter and Spectral (Google Fonts) — SIL Open Font License 1.1
+
+Vendored inside the modules, not here:
+
+    cpp-httplib 0.23.1 — MIT        (in mod-ollama-chat)
+    nlohmann/json 3.11.3 — MIT      (in mod-ollama-chat)
+    libmpq — GPL-2.0-or-later       (linked by mod-dashboard's mpq_extract)
+
+The server modules
+------------------
+
+The modules are their own repositories and carry their own terms:
+
+    mod-ledger, mod-dashboard       MIT (ours)
+    mod-playerbots fork             GPL-2.0-or-later (upstream)
+    mod-ollama-chat fork            AGPL-3.0 (upstream)
+    mod-ah-bot-plus fork            per file; see that repository's NOTICE
+    azerothcore-wotlk               GPL-2.0-or-later, unchanged
+    mod-progression-system          unchanged
+
+The combined server binary
+--------------------------
+
+AzerothCore links its modules statically, and GPL-2.0-or-later code combines
+with AGPL-3.0 under GPLv3 section 13. The shipped worldserver as a whole is
+therefore AGPL-3.0: anyone who runs it for other people must offer them its
+source. Publishing the forks does that.
+
+Not distributed here
+--------------------
+
+No Blizzard material is in this repository or its history: no client files, no
+extracted dbc/maps/vmaps/mmaps, no map art, no world database dumps. World of
+Warcraft and Azeroth are trademarks of Blizzard Entertainment, which does not
+endorse or sponsor this project.

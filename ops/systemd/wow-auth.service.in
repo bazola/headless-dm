@@ -1,0 +1,16 @@
+[Unit]
+Description=AzerothCore authserver
+After=network-online.target mysql.service
+Wants=network-online.target mysql.service
+
+[Service]
+Type=simple
+User=@WOW_USER@
+Group=@WOW_USER@
+WorkingDirectory=@SERVER_PREFIX@/bin
+ExecStart=@SERVER_PREFIX@/bin/authserver
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

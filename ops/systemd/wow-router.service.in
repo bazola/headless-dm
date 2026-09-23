@@ -1,0 +1,20 @@
+[Unit]
+Description=Ollama-compatible LLM router for mod-ollama-chat
+# No tailscaled dependency: this realm happened to reach its model servers over a tailnet, which is a
+# fact about one house and not about the software (plan 23 W6). A site that needs a VPN up first adds a
+# drop-in: systemctl edit wow-router, then After=/Wants= whatever brings its network up.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@WOW_USER@
+Group=@WOW_USER@
+WorkingDirectory=@REPO@/services/router
+EnvironmentFile=-@SITE_DIR@/router.env
+ExecStart=/usr/bin/python3 @REPO@/services/router/03-router.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

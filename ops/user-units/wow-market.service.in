@@ -1,0 +1,11 @@
+[Unit]
+Description=Market memory: learned prices, market talk, and the dashboard's panel (plans/17)
+
+[Service]
+# The economy service; the unit is named for what it does, not for the directory it lives in.
+ExecStart=/usr/bin/python3 @REPO@/services/economy/market.py run --interval 600
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target

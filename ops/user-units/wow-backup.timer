@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly realm backup (plan 23 W13)
+
+[Timer]
+# 04:00, when nobody is playing and the chronicler's night watch has finished.
+OnCalendar=*-*-* 04:00:00
+# If the machine was asleep at 04:00, run once it is awake rather than skipping the night.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

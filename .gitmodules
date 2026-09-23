@@ -1,0 +1,28 @@
+[submodule "src/azerothcore-wotlk"]
+	path = src/azerothcore-wotlk
+	url = https://github.com/mod-playerbots/azerothcore-wotlk.git
+	branch = Playerbot
+[submodule "src/modules/mod-playerbots"]
+	path = src/modules/mod-playerbots
+	url = https://github.com/bazola/mod-playerbots.git
+	branch = custom-wow
+[submodule "src/modules/mod-ollama-chat"]
+	path = src/modules/mod-ollama-chat
+	url = https://github.com/bazola/mod-ollama-chat.git
+	branch = custom-wow
+[submodule "src/modules/mod-ah-bot-plus"]
+	path = src/modules/mod-ah-bot-plus
+	url = https://github.com/bazola/mod-ah-bot-plus.git
+	branch = custom-wow
+[submodule "src/modules/mod-ledger"]
+	path = src/modules/mod-ledger
+	url = https://github.com/bazola/mod-ledger.git
+	branch = main
+[submodule "src/modules/mod-dashboard"]
+	path = src/modules/mod-dashboard
+	url = https://github.com/bazola/mod-dashboard.git
+	branch = main
+[submodule "src/modules/mod-progression-system"]
+	path = src/modules/mod-progression-system
+	url = https://github.com/bazola/mod-progression-system.git
+	branch = main

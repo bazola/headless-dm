@@ -1,0 +1,10 @@
+[Unit]
+Description=Chronicler: faction day-books and the rumours that travel between them (plans/19)
+
+[Service]
+ExecStart=/usr/bin/python3 @REPO@/services/chronicler/chronicler.py run --interval 600
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target
