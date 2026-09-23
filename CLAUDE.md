@@ -15,7 +15,8 @@ server modules are submodules under `src/`. The Python services are in `services
 
 ## Changing things
 
-Read `docs/EXTENDING.md` first. Design notes are in `docs/design/`.
+Read `docs/EXTENDING.md` first. The architecture, and the rules the design keeps, are Appendix A of
+`docs/GUIDE.md`.
 
 ## Rules
 

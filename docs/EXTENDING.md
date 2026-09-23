@@ -164,7 +164,9 @@ the wander actions instead.
 1. **Code.** `services/<name>/<name>.py` with `run --interval N`, `once`, and `--dry-run`. Settings come from the
    shared loader (`site.env`, `secrets.env`, `fleet.toml`).
 2. **Schema.** `services/<name>/<name>_tables.sql`, applied by the service at start.
-3. **Unit.** `ops/user-units/wow-<name>.service`.
+3. **Unit.** `ops/user-units/wow-<name>.service.in` — a template, not a finished unit: `ops/systemd/install.sh`
+   renders `@REPO@`, `@SITE_DIR@`, `@WOW_USER@` and `@SERVER_PREFIX@` into it, and refuses any unit still holding
+   an unresolved `@...@`. Add the name to that script's user-mode `UNITS` list too, or nothing installs it.
 4. **Pause.** A `PAUSE` file, checked at the top of each cycle.
 5. **Operator output.** Optional `/data/<name>.json` for the dashboard.
 

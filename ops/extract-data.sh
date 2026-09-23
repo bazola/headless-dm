@@ -67,7 +67,7 @@ if [ "$missing" -gt 0 ]; then
   echo "client. Usually it is not build 12340 enUS, or it is a partial copy."
   exit 1
 fi
-say "all twelve stock archives linked"
+say "all thirteen stock archives linked"
 [ "$VIEW_ONLY" = "1" ] && exit 0
 
 # --- 6.2 extract -------------------------------------------------------------
