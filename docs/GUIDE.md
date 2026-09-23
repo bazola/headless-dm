@@ -229,7 +229,7 @@ sudo mkdir -p /opt/wow && sudo chown <account>: /opt/wow
 **Steps.**
 
 ```bash
-git clone --recursive https://github.com/<owner>/headless-dm.git /opt/wow/headless-dm
+git clone --recursive https://github.com/bazola/headless-dm.git /opt/wow/headless-dm   # or your own fork
 cd /opt/wow/headless-dm
 mkdir -p site && cp site.example/site.env site/site.env && cp site.example/fleet.toml site/fleet.toml
 ( umask 077; { printf 'DB_PASS=%s\n' "$(openssl rand -hex 16)"; printf 'DASHBOARD_TOKEN=%s\n' "$(openssl rand -hex 16)"; printf 'LORE_GATE_TOKEN=%s\n' "$(openssl rand -hex 16)"; } > site/secrets.env )
