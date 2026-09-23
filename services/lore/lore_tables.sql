@@ -36,7 +36,7 @@ SELECT c.guid, c.account,
             ELSE 'player' END AS kind,
        pm.main_guid
 FROM characters c
-JOIN acore_auth.account a ON a.id = c.account
+JOIN {{AUTH_DB}}.account a ON a.id = c.account
 LEFT JOIN player_main pm ON pm.account_id = c.account;
 
 -- What is between an alt and the main it is bound to (plan 21 §3). Written before the backstory, so the

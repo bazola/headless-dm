@@ -448,7 +448,7 @@ def claimable():
     if skip:
         where += " AND a.username NOT IN (" + ",".join(g.q(s) for s in skip) + ")"
     rows = g.sql("SELECT c.guid, c.name, c.account, c.race, c.class, c.level FROM characters c "
-                 "JOIN acore_auth.account a ON a.id = c.account "
+                 f"JOIN {g.AUTH_DB}.account a ON a.id = c.account "
                  "LEFT JOIN player_main pm ON pm.account_id = c.account "
                  f"WHERE a.username NOT LIKE 'RNDBOT%' AND pm.account_id IS NULL {where} "
                  "ORDER BY c.level DESC, c.name")

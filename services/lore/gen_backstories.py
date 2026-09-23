@@ -87,6 +87,12 @@ def log(msg):
 # database (mysql CLI; credentials from site/secrets.env, else the live conf. Never printed.)
 
 _DB = site.db("characters")
+# The auth schema, by name, for the one query that has to reach across databases: person_kind reads
+# account.username to tell a bot from a person. It was written in as the literal `acore_auth`, which is
+# invisible on every realm that kept the default four names and fatal on any realm that did not --
+# ensure_schema() applies lore_tables.sql before anything else, so a wrong name aborted generate, traits,
+# crafts and both sample commands. Same shape as mod-ollama-chat's hardcoded table_schema checks.
+AUTH_DB = site.get("DB_AUTH", "acore_auth")
 _db_lock = threading.Lock()
 
 
@@ -117,7 +123,9 @@ def q(s):
 
 
 def ensure_schema():
-    sql(open(os.path.join(LORE_DIR, "lore_tables.sql")).read(), fetch=False)
+    # {{AUTH_DB}} is the only templated name in the file; everything else lives in this schema.
+    sql(open(os.path.join(LORE_DIR, "lore_tables.sql")).read().replace("{{AUTH_DB}}", AUTH_DB),
+        fetch=False)
     for table in ("lore_guild", "lore_character"):
         if not sql("SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() "
                    f"AND table_name = '{table}' AND column_name = 'era'"):
