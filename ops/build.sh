@@ -33,6 +33,13 @@ done
 : "${SERVER_PREFIX:?SERVER_PREFIX is not set in site/site.env}"
 CORE=${CORE_DIR:-$REPO/src/azerothcore-wotlk}
 [ -d "$CORE" ] || { echo "no core checkout at $CORE — set CORE_DIR, or run ops/bootstrap.sh first"; exit 1; }
+# The directory can exist and hold nothing: an interrupted `git clone --recursive` records the submodule
+# at its pin (so `git submodule status` calls it clean) without checking out a single file. Say so here,
+# rather than letting cmake fail forty lines later with "does not appear to contain CMakeLists.txt".
+[ -f "$CORE/CMakeLists.txt" ] || {
+  echo "$CORE has no CMakeLists.txt — the checkout is there but empty. Run:"
+  echo "    git -C \"$REPO\" submodule update --init --recursive --force"
+  exit 1; }
 [ -d "$CORE/modules" ] || { echo "$CORE/modules is missing — run ops/bootstrap.sh to link the modules in"; exit 1; }
 
 say() { echo "[$(date +%H:%M:%S)] $*"; }

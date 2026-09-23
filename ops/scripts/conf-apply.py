@@ -51,6 +51,13 @@ def _rebuild(key):
 # Keys the module can pick up without a restart, via `ra "ollama reload"`.
 RELOADABLE = re.compile(r"^(OllamaChat|Regard|Chronicle)\.", re.I)
 
+# Site keys whose EMPTY value is an answer rather than a gap. site.example/site.env documents
+# `MERCHANT_ACCOUNT=` and `MERCHANT_CHARACTERS=` (both empty) as "disables the seller", but site.get
+# collapses empty into its default, so an operator who took that documented option had mod_ahbot.conf
+# refused outright with "cannot resolve". Every OTHER placeholder left empty is a half-filled site.env
+# and must still stop the write -- that is the whole point of refusing a half-substituted conf.
+OPTIONAL_EMPTY = {"MERCHANT_ACCOUNT", "MERCHANT_CHARACTERS"}
+
 
 def resolve(key, value):
     """The live value for one override line, or None if something is missing."""
@@ -62,7 +69,9 @@ def resolve(key, value):
 
     def one(m):
         got = site.get(m.group(1))
-        return got if got not in (None, "") else m.group(0)
+        if got not in (None, ""):
+            return got
+        return "" if m.group(1) in OPTIONAL_EMPTY else m.group(0)
 
     filled = PLACEHOLDER.sub(one, value)
     return None if PLACEHOLDER.search(filled) else filled
@@ -70,12 +79,20 @@ def resolve(key, value):
 
 def apply_file(overrides, etc, dry):
     name = os.path.basename(overrides)[: -len(".overrides")]
-    live = os.path.join(etc, name + ".conf")
-    if not os.path.exists(live):
-        live = os.path.join(etc, "modules", name + ".conf")
+    # A conf lives either at <etc>/<name>.conf (worldserver, authserver, dbimport) or at
+    # <etc>/modules/<name>.conf -- and on a freshly built server ONLY the .dist exists, because the
+    # build installs nothing else (src/cmake/macros/ConfigInstall.cmake installs *.conf.dist alone).
+    # Each candidate must therefore be paired with its OWN .dist. Pairing a top-level name with the
+    # modules/ .dist is how every main conf silently went unwritten on a clean-room realm: the guide's
+    # Phase 7.1 reported "not applied" for worldserver, authserver and dbimport, and Phase 7.2 then had
+    # no config to run at all.
+    candidates = [os.path.join(etc, name + ".conf"), os.path.join(etc, "modules", name + ".conf")]
+    live = next((p for p in candidates if os.path.exists(p)), None)
+    if live is None:
+        live = next((p for p in candidates if os.path.exists(p + ".dist")), None)
+    if live is None:
+        return name, [], [f"neither {name}.conf nor {name}.conf.dist exists in {etc} or {etc}/modules"]
     dist = live + ".dist"
-    if not os.path.exists(live) and not os.path.exists(dist):
-        return name, [], [f"neither {os.path.basename(live)} nor its .dist exists"]
 
     wanted, unresolved = {}, []
     for raw in open(overrides, encoding="utf-8"):

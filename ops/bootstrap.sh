@@ -64,12 +64,34 @@ if [ ! -d "$CORE" ]; then
   exit 1
 fi
 
+# A submodule directory can exist and be EMPTY: an interrupted `git clone --recursive` records the
+# submodule at its pin, so `git submodule status` reports it clean, while the working tree holds no
+# files at all. Testing for the directory is not enough -- test for a file that must be in it, or this
+# script cheerfully creates modules/ and six healthy-looking links inside an empty core and the failure
+# only surfaces in cmake, much later and much less clearly.
+if [ ! -f "$CORE/CMakeLists.txt" ]; then
+  echo
+  echo "the core checkout at $CORE has no CMakeLists.txt: the directory is there but empty."
+  echo "That is what an interrupted 'git clone --recursive' leaves behind. Run:"
+  echo
+  echo "    git -C \"$REPO\" submodule update --init --recursive --force"
+  echo
+  exit 1
+fi
+
 say "linking modules into the core"
 mkdir -p "$CORE/modules"
 linked=0
 for m in "$MODS"/*/; do
   [ -d "$m" ] || continue
   n=$(basename "$m")
+  # Same trap as the core above, once per module: an un-checked-out submodule is an empty directory,
+  # and linking it gives you a link that resolves to nothing.
+  if [ -z "$(ls -A "$m" 2>/dev/null)" ]; then
+    printf '    EMPTY   %-22s not checked out — git submodule update --init --recursive --force\n' "$n"
+    miss=$((miss + 1))
+    continue
+  fi
   target="$CORE/modules/$n"
   if [ "$CHECK_ONLY" = "1" ]; then
     [ -e "$target" ] && printf '    ok      %s\n' "$n" || { printf '    MISSING link %s\n' "$n"; miss=$((miss + 1)); }

@@ -276,6 +276,8 @@ module SQL, era brackets), and the path is baked in at build time. Don't move it
 
 ```bash
 git submodule status | grep -E '^[-+U]' && echo "SUBMODULES NOT CLEAN" || echo "submodules at pins"
+test -f src/azerothcore-wotlk/CMakeLists.txt && echo "core checked out" || echo "CORE EMPTY"
+for m in src/modules/*/; do [ -n "$(ls -A "$m")" ] || echo "EMPTY SUBMODULE: $m"; done
 ls -l src/azerothcore-wotlk/modules/ | grep -c -- '->'          # 6
 stat -c %a site/secrets.env                                      # 600
 for k in DB_PASS DASHBOARD_TOKEN RA_USER RA_PASS; do grep -q "^$k=." site/secrets.env && echo "$k set" || echo "$k MISSING"; done
@@ -504,6 +506,17 @@ What `conf-apply.py` does:
 - Sets every key in `conf/*.overrides`, filling `${…}` values from `site/`.
 - Backs up what it changes to `$BACKUP_DIR`.
 - Refuses to write a literal placeholder.
+
+**Count the configs before going on.** A fresh build installs only `*.conf.dist`, so every `.conf` here was
+written by the command above; if it skipped one it says so under `not applied:` and **exits non-zero — that is a
+failure, not a warning.** Phase 7.2 and 7.3 both read configs that must already exist:
+
+```bash
+. ops/env.sh && ls "$SERVER_PREFIX/etc"/*.conf "$SERVER_PREFIX/etc/modules"/*.conf | wc -l    # 9
+```
+
+Nine: `authserver`, `worldserver`, `dbimport`, and the six module confs. Anything less and the missing file's
+server will start on `.dist` defaults — pointing at the wrong database, with the modules unconfigured.
 
 **What the overrides turn on**, which you should be able to explain to the operator:
 
