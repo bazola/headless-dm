@@ -2,7 +2,7 @@
 """
 03-router.py — Ollama-impersonating LLM router with failover.
 
-Sits on the realm host port 11434 (Ollama's default) so mod-ollama-chat needs no
+Sits on the realm's own host at port 11434 (Ollama's default) so mod-ollama-chat needs no
 special endpoint config. Translates Ollama API calls (/api/generate,
 /api/chat) into OpenAI /v1/chat/completions against llama-server or
 LM Studio backends across the tailnet, with ordered failover per route

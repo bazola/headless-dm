@@ -46,8 +46,16 @@ def _parse(path):
                     continue
                 value = value.strip()
                 # Trailing comments only where the value is not quoted; a password may contain a '#'.
-                if value[:1] in ("'", '"') and value[-1:] == value[:1] and len(value) >= 2:
-                    value = value[1:-1]
+                # A quoted value may still be FOLLOWED by a comment -- `TOKEN="abc" # from openssl`.
+                # Testing only the last character misses that and leaves the quotes in the value,
+                # while ops/env.sh, sourcing the same file in bash, strips them. The two readers have
+                # to agree on every line: that agreement is the whole reason this module exists.
+                if value[:1] in ("'", '"'):
+                    quote = value[0]
+                    close = value.rfind(quote)
+                    trailer = value[close + 1:].strip() if close > 0 else None
+                    if close > 0 and (trailer == "" or trailer.startswith("#")):
+                        value = value[1:close]
                 elif " #" in value:
                     value = value.split(" #", 1)[0].strip()
                 out[key.strip()] = value

@@ -57,5 +57,8 @@ echo "Then delete it, because it holds the password:"
 echo
 echo "    shred -u $OUT   # or: rm -f $OUT"
 echo
-echo "Afterwards this should print the four schema names:"
-echo "    . ops/env.sh && db -N -e \"SHOW DATABASES LIKE 'acore%'\""
+# Name the four schemas this run actually created. A wildcard guess ('acore%') prints nothing for an
+# operator who set DB_AUTH and friends to something else -- reading as "Phase 5 did nothing" on a
+# Phase 5 that worked.
+echo "Afterwards this should print all four schema names ($AUTH, $CHARS, $WORLD, $BOTS):"
+echo "    . ops/env.sh && db -N -e \"SELECT schema_name FROM information_schema.schemata WHERE schema_name IN ('$AUTH','$CHARS','$WORLD','$BOTS')\""

@@ -108,14 +108,17 @@ step_lore() {
 step_main() {
   NEXT=society
   gate "G10 — name the main" \
-    "Ask the operator which character they play as themselves, then name it:" \
+    "Ask the operator which character they play as themselves, then name it." \
+    "" \
+    "The lore gate has to be answering for the two calls below. Its unit is installed by the LATER" \
+    "'services' step, so on a clean-room run it is NOT up yet — start it by hand first (GUIDE 10.5)." \
     "" \
     "  GATE=\"http://\${LORE_GATE_BIND:-127.0.0.1}:\${LORE_GATE_PORT:-8788}\"" \
     "  curl -s -H \"X-Lore-Token: \$LORE_GATE_TOKEN\" \"\$GATE/claim\"" \
     "  curl -s -X POST \"\$GATE/main-set\" -H \"X-Lore-Token: \$LORE_GATE_TOKEN\" \\" \
     "       -H 'Content-Type: application/json' -d '{\"character\": \"<name>\"}'" \
     "" \
-    "Then write the alts:  python3 services/lore/gen_backstories.py alts --era $ERA" \
+    "Then write the alts:  cd \"$REPO\" && python3 services/lore/gen_backstories.py alts --era $ERA" \
     "" \
     "A realm with no player character is a real thing to want. If that is the case here, say so out" \
     "loud and write \"no main by choice\" in site/SETUP-STATE.md, so no later session re-asks."

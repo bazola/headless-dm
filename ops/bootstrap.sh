@@ -80,7 +80,9 @@ if [ ! -f "$CORE/CMakeLists.txt" ]; then
 fi
 
 say "linking modules into the core"
-mkdir -p "$CORE/modules"
+# --check-only reports; it does not change the tree. Creating this directory unconditionally made a
+# read-only status check leave a mark behind it.
+[ "$CHECK_ONLY" = "1" ] || mkdir -p "$CORE/modules"
 linked=0
 for m in "$MODS"/*/; do
   [ -d "$m" ] || continue

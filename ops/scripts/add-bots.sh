@@ -62,12 +62,17 @@ conf_set() { sed -i -E "s/^(AiPlayerbot\.$1[[:space:]]*=[[:space:]]*).*/\1$2/" "
 say() { echo "[$(date +%H:%M:%S)] $*"; }
 
 CLASSIC="c.race NOT IN (10,11) AND c.class <> 6"
-BOTS="characters c JOIN acore_auth.account a ON a.id = c.account AND a.username LIKE 'RNDBOT%'"
-TYPE1="JOIN acore_playerbots.playerbots_account_type t ON t.account_id = c.account AND t.account_type = 1"
-rnd_accounts() { q "SELECT COUNT(*) FROM acore_playerbots.playerbots_account_type WHERE account_type = 1"; }
+# Schema names from site/, like db-init.sh and backup.sh. Hardcoded ones make every query here fail
+# silently for an operator who renamed them -- q() swallows stderr, so the arithmetic below would then
+# be handed an empty string rather than a number.
+AUTH_DB=${DB_AUTH:-acore_auth}
+PB_DB=${DB_PLAYERBOTS:-acore_playerbots}
+BOTS="characters c JOIN $AUTH_DB.account a ON a.id = c.account AND a.username LIKE 'RNDBOT%'"
+TYPE1="JOIN $PB_DB.playerbots_account_type t ON t.account_id = c.account AND t.account_type = 1"
+rnd_accounts() { q "SELECT COUNT(*) FROM $PB_DB.playerbots_account_type WHERE account_type = 1"; }
 pool() { q "SELECT COUNT(*) FROM $BOTS $TYPE1 WHERE $CLASSIC"; }
 online() { q "SELECT COUNT(*) FROM $BOTS WHERE c.online = 1"; }
-bot_count() { q "SELECT value FROM acore_playerbots.playerbots_random_bots WHERE owner = 0 AND bot = 0 AND event = 'bot_count'"; }
+bot_count() { q "SELECT value FROM $PB_DB.playerbots_random_bots WHERE owner = 0 AND bot = 0 AND event = 'bot_count'"; }
 need_accounts() { echo $(( ($1 + CHARS_PER_ACCOUNT - 1) / CHARS_PER_ACCOUNT )); }
 
 report() {

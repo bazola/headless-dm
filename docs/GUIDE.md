@@ -281,7 +281,7 @@ for m in src/modules/*/; do [ -n "$(ls -A "$m")" ] || echo "EMPTY SUBMODULE: $m"
 ls -l src/azerothcore-wotlk/modules/ | grep -c -- '->'          # 6
 stat -c %a site/secrets.env                                      # 600
 for k in DB_PASS DASHBOARD_TOKEN RA_USER RA_PASS; do grep -q "^$k=." site/secrets.env && echo "$k set" || echo "$k MISSING"; done
-. ops/env.sh && echo "$WOW_ROOT $REALM_ADDRESS $ERA"
+. ops/env.sh && for k in WOW_ROOT REALM_ADDRESS ERA REALM_FIRST_DAY; do [ -n "${!k:-}" ] && echo "$k=${!k}" || echo "$k MISSING"; done
 ```
 
 **Record.** The superproject commit (`git rev-parse HEAD`), `git submodule status` output, and the site.env values
@@ -346,6 +346,7 @@ nohup nice -n 10 make -j"$(nproc)" install > "$LOGS_DIR/setup/build.log" 2>&1 < 
 
 ```bash
 . ops/env.sh && tail -3 "$LOGS_DIR/setup/build.log"
+. ops/env.sh && grep -ciE "^(make(\[[0-9]+\])?: \*\*\*|.*: error:)" "$LOGS_DIR/setup/build.log"   # 0
 ls "$SERVER_PREFIX/bin"        # authserver dbimport map_extractor mmaps_generator vmap4_assembler vmap4_extractor worldserver
 ls "$SERVER_PREFIX/etc"/*.conf.dist "$SERVER_PREFIX/etc/modules"/*.conf.dist
 ```
@@ -403,8 +404,9 @@ while the worldserver is stopped.
 **Check.**
 
 ```bash
-. ops/env.sh && db -N -e "SHOW DATABASES LIKE 'acore\_%'"        # 4 rows
-test ! -e "$WOW_ROOT/tmp/db-init.sql" && echo "init file removed"
+. ops/env.sh && db -N -e "SELECT schema_name FROM information_schema.schemata
+   WHERE schema_name IN ('$DB_AUTH','$DB_CHARACTERS','$DB_WORLD','$DB_PLAYERBOTS')"        # 4 rows
+test ! -e "$WOW_ROOT/tmp/db-init.sql" && echo "init file removed" || echo "STILL THERE — it holds the password"
 ```
 
 **Record.** Done; whether tuning was applied, and with what buffer pool.
@@ -758,17 +760,21 @@ Bots have no backstories yet, so their voices are generic. That is expected unti
 **While they play:**
 
 ```bash
+# Run this BEFORE the operator says anything and write both numbers down. The realm has been talking to
+# itself since Phase 7, so these tables are already large; what proves this phase is the difference.
 . ops/env.sh && db -N acore_characters -e "SELECT COUNT(*) FROM ledger_chat; SELECT COUNT(*) FROM ledger_event;"
+# ...then run the same line again once they report back.
 ```
 
-Both counts rise.
+Both counts rise **above the figures you took before G8**. A single count taken afterwards proves nothing here:
+neither table is empty by this phase, whatever the bot did or didn't say.
 
 **Optional client addon:** [CleanBot](https://github.com/bennybroseph/CleanBot) (MIT) gives a UI for commanding your
 own bots. Commands to your own bots don't get spoken replies (`SkipMasterCommands`).
 
 **Check.**
 - The operator reports an answer in character.
-- The ledger counts rise.
+- The ledger counts rise **above the pre-G8 figures**.
 
 **Record.** The operator's words about the reply, and any lag they saw.
 
@@ -948,7 +954,7 @@ guards is invisible from inside the game.
 ```bash
 . ops/env.sh && db -N acore_characters -e "
   SELECT COUNT(*) FROM player_main;
-  SELECT COUNT(*) FROM lore_character WHERE lore_alt IS NOT NULL;"
+  SELECT COUNT(*) FROM lore_alt;"
 ```
 
 - **If a main was named:** at least one row, and a bond for each of that account's other characters. If `alts` says
@@ -1198,11 +1204,16 @@ Repeat until the target is reached, one step at a time.
 . ops/env.sh && "$REPO/ops/scripts/backup.sh"        # dumps four databases + site/ + live confs into BACKUP_DIR, rotates
 ```
 
-The operator runs:
+`install.sh --user` renders `wow-backup.service` and `wow-backup.timer` into the **user** manager
+(`~/.config/systemd/user`) — they are never installed system-wide, so `sudo systemctl enable` cannot find them.
+As `WOW_USER`, not as root:
 
 ```bash
-sudo systemctl enable --now wow-backup.timer        # nightly
+systemctl --user enable --now wow-backup.timer      # nightly
 ```
+
+The one part that does need root is lingering, without which the user manager stops when they log out and the
+timer never fires: `sudo loginctl enable-linger <WOW_USER>`.
 
 Tell the operator plainly:
 - Backups stay on this machine in `BACKUP_DIR`, and include their secrets.
@@ -1225,7 +1236,8 @@ commit `site/secrets.env`.**
 
 **Check.**
 - A backup file from today exists in `BACKUP_DIR`.
-- `systemctl list-timers | grep wow-backup` shows the next run.
+- `systemctl --user list-timers | grep wow-backup` shows the next run. **`--user` matters:** the system-scope
+  command finds nothing however well the timer is configured, because the unit only exists in the user manager.
 - Every phase in the state file is `done`.
 
 ---

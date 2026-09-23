@@ -12,6 +12,11 @@ import argparse
 import glob
 import os
 import re
+import sys
+
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))), "services"))
+from common import site  # noqa: E402
 
 SECRET = re.compile(r"(DatabaseInfo|Password|Token|ApiKey|Secret)", re.I)
 
@@ -62,7 +67,10 @@ def keys(path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--etc", default="/opt/wow/server/etc")
+    # From site/, like every sibling script. Hardcoding this machine's prefix made the whole run a
+    # silent no-op anywhere else: the glob below matched nothing, the loop never ran, and it still
+    # exited 0 -- and add-bots.sh calls it with its output thrown away.
+    ap.add_argument("--etc", default=os.path.join(site.get("SERVER_PREFIX", "/opt/wow/server"), "etc"))
     args = ap.parse_args()
     out_dir = os.path.join(REPO, "conf")
     os.makedirs(out_dir, exist_ok=True)

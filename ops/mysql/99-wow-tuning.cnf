@@ -1,4 +1,4 @@
-# MySQL tuning for the custom-wow server (AzerothCore + mod-playerbots at 500-2000 bots).
+# MySQL tuning for a Headless DM realm (AzerothCore + mod-playerbots at 500-2000 bots).
 # Install: sudo cp /opt/wow/mysql/99-wow-tuning.cnf /etc/mysql/mysql.conf.d/
 # Apply only with the worldserver stopped:
 #   sudo systemctl stop wow-world && sudo systemctl restart mysql && sudo systemctl start wow-world
