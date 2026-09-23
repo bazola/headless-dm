@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/img/banner.jpg" alt="Headless DM — a chained, armoured rider reading a spellbook of green fire, beneath the Headless DM wordmark">
+</p>
+
 # Headless DM
 
 An **AzerothCore 3.3.5a** realm where hundreds of playerbots are voiced by language models as people who
