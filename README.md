@@ -37,6 +37,16 @@ cp site.example/site.env site/site.env      # then fill it in
 Then follow `docs/GUIDE.md` from Part 0. It is written to be run by a coding agent alongside you: it stops
 at every gate and asks rather than guessing.
 
+## Getting help
+
+Setting this up runs against your own hardware, your own models and your own copy of the client, so it goes
+wrong in ways a guide cannot always predict. If you stall at a phase gate, ask:
+
+**[discord.gg/zpnYXhDs3X](https://discord.com/invite/zpnYXhDs3X)**
+
+Bring the phase number and the exact error. The guide records its progress in `site/SETUP-STATE.md`, which is
+usually the fastest thing to paste.
+
 ## The shape of it
 
 The world server never waits for slow thinking. Everything the realm does is recorded by `mod-ledger`; the
@@ -63,3 +73,11 @@ MIT — see `LICENSE`, and `NOTICE` for the components this builds on.
 
 World of Warcraft and Warcraft are trademarks of Blizzard Entertainment. This project is not affiliated with
 or endorsed by Blizzard, and distributes no Blizzard data.
+
+---
+
+<p align="center">
+  <a href="https://pixelpocalypsegames.com/">Pixelpocalypse Games</a> &nbsp;·&nbsp;
+  <a href="https://discord.com/invite/zpnYXhDs3X">Discord</a> &nbsp;·&nbsp;
+  <a href="https://www.youtube.com/@bazola8654">YouTube</a>
+</p>
