@@ -126,6 +126,34 @@ def pick_lanes(names=None, slots=None):
     return [lane for lane in chosen if lane.slots > 0]
 
 
+_lane_fallback_warned = set()
+
+
+def prefer_lanes(names=None, slots=None):
+    """pick_lanes, but a lane name this fleet.toml does not have is a PREFERENCE, not a fatal error.
+
+    A lane name written into our code ("evo-quality,z13-qwen35") is this realm's hardware, not the
+    project's. Another realm names its machines differently, and `pick_lanes` raises SystemExit on a
+    name it cannot find -- which `except Exception` does NOT catch, because SystemExit is a
+    BaseException. An always-on service (regard, the chronicler) therefore exits mid-cycle and systemd
+    restart-loops it every 60s forever, taking everything later in the cycle with it.
+
+    So: use the named lanes when they exist, and otherwise fall back to whatever this fleet.toml
+    prefers, saying so once. On a realm that HAS the named lanes this is exactly pick_lanes.
+    """
+    lanes = all_lanes()
+    wanted = [n.strip() for n in (names or "").split(",") if n.strip()]
+    missing = [n for n in wanted if n not in lanes]
+    if missing:
+        key = ",".join(sorted(missing))
+        if key not in _lane_fallback_warned:
+            _lane_fallback_warned.add(key)
+            print(f"fleet: no batch lane named {', '.join(missing)}; using this fleet's own lanes "
+                  f"({', '.join(default_lane_names()) or 'none'}) instead", file=sys.stderr, flush=True)
+        return pick_lanes("", slots)
+    return pick_lanes(names, slots)
+
+
 class Judge:
     """Asks qwen3-8b whether a text is out of its era. Fast (~2 s) and a second
     opinion only: when the lane is down, check() returns None and the caller

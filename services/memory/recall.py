@@ -251,7 +251,7 @@ def backfill(args):
         log("dry run; pass --apply to write")
         return 0
 
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
     written = []
 
     def job(c):
@@ -505,7 +505,7 @@ def events_backfill(args):
         log("dry run; pass --apply to write")
         return 0
 
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
     written = []
 
     def job(o):

@@ -1009,7 +1009,7 @@ def create_actions(actions, names, meta):
             a["prompt"] = ACTION_PROMPT.format(company=company, charter=charters.get(a["guild"], ""), player=a["name"],
                                                situation=situation)
 
-    pool = fleet.Pool(fleet.pick_lanes("evo-quality,z13-qwen35", "evo-quality=1,z13-qwen35=1"),
+    pool = fleet.Pool(fleet.prefer_lanes("evo-quality,z13-qwen35", "evo-quality=1,z13-qwen35=1"),
                       log=lambda m: log(m) if "FAILED" in m else None)
 
     def job(a):
@@ -1596,7 +1596,7 @@ def write_talk(a, b, pa, pb, feel, e, meta, names):
             raise ValueError(f"only {len(lines)} usable lines")
         result.update(lines=lines, model=(lane.name + ":" + lane.model)[:64])
 
-    pool = fleet.Pool(fleet.pick_lanes("evo-quality,z13-qwen35", "evo-quality=1,z13-qwen35=1"),
+    pool = fleet.Pool(fleet.prefer_lanes("evo-quality,z13-qwen35", "evo-quality=1,z13-qwen35=1"),
                       log=lambda msg: log(msg) if "FAILED" in msg else None)
     pool.submit("character", 1, run, f"talk {pa['name']} and {pb['name']}")
     pool.run()
@@ -1887,7 +1887,7 @@ def describe(meta):
     if not rows:
         return 0
     # One slot on each fast lane: live chat shares these backends.
-    pool = fleet.Pool(fleet.pick_lanes("evo-quality,z13-qwen35", "evo-quality=1,z13-qwen35=1"),
+    pool = fleet.Pool(fleet.prefer_lanes("evo-quality,z13-qwen35", "evo-quality=1,z13-qwen35=1"),
                       log=lambda m: log(m) if "FAILED" in m else None)
     done = []
 

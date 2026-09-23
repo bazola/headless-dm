@@ -30,7 +30,9 @@ SITE = {
     "AiPlayerbot.MinRandomBots": "${BOT_MIN}",
     "AiPlayerbot.MaxRandomBots": "${BOT_MAX}",
     "Dashboard.Bind": "${DASHBOARD_BIND}",
+    "Dashboard.Port": "${DASHBOARD_PORT}",
     "Dashboard.DataRoot": "${DATA_DIR}/dashboard-data",
+    "Dashboard.MapRoot": "${DATA_DIR}/dashboard-maps",
     "AuctionHouseBot.Merchants.Account": "${MERCHANT_ACCOUNT}",
     "AuctionHouseBot.Merchants.Characters": "${MERCHANT_CHARACTERS}",
     "AuctionHouseBot.AllowedItemIDsFile": "${DATA_DIR}/economy/allowed-items.txt",
@@ -76,7 +78,11 @@ def main():
     os.makedirs(out_dir, exist_ok=True)
     for live in sorted(glob.glob(os.path.join(args.etc, "*.conf")) + glob.glob(os.path.join(args.etc, "modules", "*.conf"))):
         dist = keys(live + ".dist")
-        changed = [(k, v) for k, v in keys(live).items() if dist.get(k) != v]
+        # A SITE-mapped key has to survive even when it happens to EQUAL the .dist default, or the
+        # template is dropped and the next realm inherits this machine's answer by accident. That is
+        # exactly how Dashboard.Port and Dashboard.MapRoot stayed un-templated: both match the .dist
+        # here, so every regeneration quietly removed them again.
+        changed = [(k, v) for k, v in keys(live).items() if dist.get(k) != v or k in SITE]
         name = os.path.basename(live)[:-len(".conf")]
         target = os.path.join(out_dir, name + ".overrides")
         with open(target, "w", encoding="utf-8") as f:

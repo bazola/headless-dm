@@ -232,9 +232,14 @@ sudo mkdir -p /opt/wow && sudo chown <account>: /opt/wow
 git clone --recursive https://github.com/<owner>/headless-dm.git /opt/wow/headless-dm
 cd /opt/wow/headless-dm
 mkdir -p site && cp site.example/site.env site/site.env && cp site.example/fleet.toml site/fleet.toml
-( umask 077; { printf 'DB_PASS=%s\n' "$(openssl rand -hex 16)"; printf 'DASHBOARD_TOKEN=%s\n' "$(openssl rand -hex 16)"; } > site/secrets.env )
+( umask 077; { printf 'DB_PASS=%s\n' "$(openssl rand -hex 16)"; printf 'DASHBOARD_TOKEN=%s\n' "$(openssl rand -hex 16)"; printf 'LORE_GATE_TOKEN=%s\n' "$(openssl rand -hex 16)"; } > site/secrets.env )
 ops/bootstrap.sh        # links src/modules/* into the core, checks tools
 ```
+
+**`bootstrap.sh` will report missing tools here, and that is expected.** It checks for `cmake`, `make`, `gcc`,
+`mysql`, `nc` and `openssl`, none of which a fresh Ubuntu carries — Phase 3 installs them. The module links are
+what matters now; run it again at the end of Phase 3 and every line should read `ok`. What it must *not* report
+is an empty core checkout: that means the clone did not finish, and no later phase can recover from it.
 
 What `bootstrap.sh` does to the modules, by hand:
 
@@ -280,7 +285,7 @@ test -f src/azerothcore-wotlk/CMakeLists.txt && echo "core checked out" || echo 
 for m in src/modules/*/; do [ -n "$(ls -A "$m")" ] || echo "EMPTY SUBMODULE: $m"; done
 ls -l src/azerothcore-wotlk/modules/ | grep -c -- '->'          # 6
 stat -c %a site/secrets.env                                      # 600
-for k in DB_PASS DASHBOARD_TOKEN RA_USER RA_PASS; do grep -q "^$k=." site/secrets.env && echo "$k set" || echo "$k MISSING"; done
+for k in DB_PASS DASHBOARD_TOKEN LORE_GATE_TOKEN RA_USER RA_PASS; do grep -q "^$k=." site/secrets.env && echo "$k set" || echo "$k MISSING"; done
 . ops/env.sh && for k in WOW_ROOT REALM_ADDRESS ERA REALM_FIRST_DAY; do [ -n "${!k:-}" ] && echo "$k=${!k}" || echo "$k MISSING"; done
 ```
 
@@ -525,10 +530,10 @@ server will start on `.dist` defaults — pointing at the wrong database, with t
 | File | Keys |
 |---|---|
 | worldserver | DB connections, `DataDir`, `LogsDir`, `MapUpdate.Threads = ${MAP_THREADS}`, `Console.Enable = 0`, `Ra.Enable = 1` + `Ra.IP = "127.0.0.1"` (GM console, port 3443), `MaxPlayerLevel = 60`, `CharacterCreating.Disabled.RaceMask = 1536` (no blood elves or draenei yet). `Expansion` stays 2: lowering it breaks character loading |
-| playerbots | `PlayerbotsDatabaseInfo`, `MinRandomBots = ${BOT_MIN}`, `MaxRandomBots = ${BOT_MAX}`, `RandomBotGuildCount = ${BOT_GUILDS}`, era (`EraExpansion = 0`, `RandomBotMaxLevel = 60`, `RandomBotMaps = 0,1`, `DisableDeathKnightLogin = 1`), canned chatter off (`RandomBotTalk = 0`, `EnableBroadcasts = 0`, `AIPlayerbot.GuildFeedback = 0` — capital "AI"), level brackets, company behaviour (`Company*`) |
+| playerbots | `PlayerbotsDatabaseInfo`, `MinRandomBots = ${BOT_MIN}`, `MaxRandomBots = ${BOT_MAX}`, `RandomBotGuildCount = ${BOT_GUILDS}`, era (`EraExpansion = 0`, `RandomBotMaxLevel = 60`, `RandomBotMaps = 0,1`, `DisableDeathKnightLogin = 1`), canned chatter off (`RandomBotTalk = 0`, `EnableBroadcasts = 0`; `AIPlayerbot.GuildFeedback = 0` keeps upstream's own capital-"AI" typo and is **inert in this module version** — the key appears only in the `.conf.dist`, never in a `GetOption` call), level brackets, company behaviour (`Company*`) |
 | mod_ollama_chat | `Url` = the router, `Model = ambient`, `MaxConcurrentQueries`, `Roleplay.Enable = 1` + `Strictness = 2`, `EnableRPPersonalities = 1`, `EnableRAG = 1`, `Regard.Enable = 1`, `Regard.CompanyWords = 1`, `Chronicle.Rumours = 1`, `Relationship.Enable = 0` and `EnableSentimentTracking = 0` (regard replaces both), `SkipMasterCommands = 1`, the in-world prompt templates |
 | mod_ledger | `RecordBotChat = 1`, `RecordGuildBots = 1` |
-| mod_dashboard | `Bind = ${DASHBOARD_BIND}` (must include 127.0.0.1), `CommandToken = ${DASHBOARD_TOKEN}`, `MapRoot`, `DataRoot` |
+| mod_dashboard | `Bind = ${DASHBOARD_BIND}` (must include 127.0.0.1), `Port = ${DASHBOARD_PORT}`, `CommandToken = ${DASHBOARD_TOKEN}`, `MapRoot = ${DATA_DIR}/dashboard-maps`, `DataRoot` |
 | progression_system | `Bracket_0` … `Bracket_60_1_2 = 1` (Classic through Molten Core), `ReapplyUpdates = 0` |
 
 ### 7.2 Import the databases
@@ -662,37 +667,61 @@ A backend that fails either test is left out, or gets `system_suffix`, and is pr
 
 ### 8.2 Write `site/fleet.toml`
 
+**`site.example/fleet.toml` is the authority for this file's shape** — Phase 2 already copied it to
+`site/fleet.toml`. Edit that copy rather than typing one from scratch; the schema below is what
+`services/common/fleet_config.py` actually reads.
+
 ```toml
+[router]
+bind       = "127.0.0.1"
+port       = 11434
+queue_wait = 20       # seconds a request waits on a busy backend before failing over
+
 [backends.main]
-url      = "http://127.0.0.1:8080"
-model    = "qwen3-14b"
-slots    = 4          # hard cap on concurrent requests to this server
-timeout  = 90
+url            = "http://127.0.0.1:8080"
+model          = "qwen3-14b"
+router_slots   = 4    # live-chat requests in flight: latency-bound
+batch_slots    = 2    # batch generations in flight: throughput-bound. Two numbers, on purpose
+router_timeout = 90   # someone is waiting for this line
+batch_timeout  = 300  # a backstory is not a chat message
+kinds          = ["guild", "character", "rag", "traits"]
+# lmstudio = true     # LM Studio rejects json_object and needs json_schema
 # system_suffix = "/no_think"
 
 [routes]              # live traffic via the router: first backend with a free slot wins, failover in order
 ambient   = ["main"]  # bot chatter and replies: lowest latency first
 quality   = ["main"]
-chronicle = ["main"]  # knowledge base rewrite
+chronicle = ["main"]
 prose     = ["main"]
 utility   = ["main"]
-moment    = ["main"]  # add "openrouter" to use the remote fallback
+moment    = ["main"]  # add a remote backend here to use a paid fallback
 
-[lanes]               # batch jobs call backends directly: one worker per slot
-writer   = { backend = "main", slots = 2, kinds = ["guild", "character", "rag", "traits"] }
-novelist = { backend = "main", slots = 1, kinds = ["character"] }
-judge    = { backend = "main", slots = 1 }       # JSON verdicts at temperature 0
+[batch]               # which machines batch lore generation may use, in preference order
+lanes = ["main"]
+
+[judge]               # JSON verdicts at temperature 0
+backend = "main"
+slots   = 3
+timeout = 60
 ```
+
+**`batch_slots` is not optional, and omitting it fails silently.** A backend without it defaults to **0**, which
+drops it out of `[batch]` altogether; the lane list then comes back empty, the worker pool starts zero threads,
+and every batch lore command in Phase 10 reports that it finished having generated nothing. There is no error to
+read. If Phase 10 produces no rows, check this first.
 
 **Assigning several backends:**
 - **Fastest** first in `ambient`.
-- **Largest** for `writer`, `novelist` and `chronicle`.
-- **Smallest one that passed the JSON test** for `judge`.
-- **A gaming PC** goes last in every route, with at most 2 slots, so it only takes work when the others are busy.
+- **Largest** first in `[batch] lanes`, and in `chronicle` and `prose`.
+- **Smallest one that passed the JSON test** for `[judge]`.
+- **A gaming PC** goes last in every route, with at most 2 `router_slots`, so it only takes work when the others
+  are busy.
 
-**Slot budget.** Live chat, the judge and batch writing can run at the same time. Keep each backend's lane slots plus
-its share of live traffic within its `slots`. Set `CHAT_CONCURRENCY` in `site/site.env` (it becomes
-`OllamaChat.MaxConcurrentQueries`) to the sum of the `ambient` backends' slots.
+**Slot budget.** Live chat, the judge and batch writing can run at the same time, and each backend is described
+**once** — one entry per machine, not per route, or its caps are duplicated and stop meaning anything. Keep a
+machine's `router_slots` + `batch_slots` + its judge slots within what it can actually serve. Set
+`CHAT_CONCURRENCY` in `site/site.env` (it becomes `OllamaChat.MaxConcurrentQueries`) to the sum of the `ambient`
+backends' `router_slots`.
 
 **For comparison, the reference realm:**
 - Live chat went to a 35B MoE with an 80B fallback.
@@ -869,7 +898,7 @@ the characters who used the old one:
 
 ```bash
 python3 gen_backstories.py name-pools --era "$ERA" --cultures Troll
-python3 gen_backstories.py repool --old <previous names.json> --cultures Troll
+python3 gen_backstories.py repool --era "$ERA" --old <previous names.json> --cultures Troll
 ```
 
 **Fix, don't regenerate.** If `era-scan` finds a company history naming a later age, fix the history by hand. Its

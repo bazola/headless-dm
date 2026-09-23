@@ -515,7 +515,7 @@ def watch_reports(start, end, faction):
 # writing
 
 def lanes_from(names):
-    return fleet.pick_lanes(names)
+    return fleet.prefer_lanes(names)
 
 
 def attempt_on(lanes, attempt):

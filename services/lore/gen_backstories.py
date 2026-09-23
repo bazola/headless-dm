@@ -395,7 +395,7 @@ def name_pools(args):
     e = eras.get(args.era)
     taken = {r[0].lower() for r in sql("SELECT name FROM characters")}
     avoid = FAMOUS | NAME_STYLE_EXAMPLES | {n.lower() for n in OVERUSED_NAMES} | {t.lower() for t, _, _ in e["targets"]}
-    lane = fleet.pick_lanes("evo-quality")[0]
+    lane = fleet.prefer_lanes("evo-quality")[0]
     cultures = sorted({NAME_CULTURE[r] for r in e["races"]})
     only = {c.strip() for c in args.cultures.split(",") if c.strip()}
     if only:
@@ -735,7 +735,7 @@ def gen_traits(lane, attempt, e, judge, c, rng):
 def traits(args):
     e = eras.get(args.era)
     ensure_schema()
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
     judge = None if args.no_judge else fleet.Judge()
     rows = trait_rows(e, extra=f"ORDER BY l.guid LIMIT {args.limit}" if args.limit else "ORDER BY l.guid")
     log(f"era {e['name']}; {len(rows)} characters without traits; lanes: "
@@ -756,7 +756,7 @@ def traits(args):
 def sample_traits(args):
     e = eras.get(args.era)
     ensure_schema()
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
     judge = fleet.Judge()
     rows = trait_rows(e, where="1 = 1", extra=f"ORDER BY RAND() LIMIT {len(lanes) * args.per_lane}")
     jobs = [(lanes[i % len(lanes)], c) for i, c in enumerate(rows)]
@@ -836,7 +836,7 @@ def reconcile(args):
         for c in todo:
             log(f"  [{c['temperament']}] {c['name']}: {c['personality'][:110]}")
         return 0
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
 
     def job(c):
         def run(lane, attempt):
@@ -926,7 +926,7 @@ def soften(args):
         if len(todo) > args.show:
             log(f"  ... and {len(todo) - args.show} more")
         return 0
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
 
     def job(c):
         def run(lane, attempt):
@@ -982,7 +982,7 @@ def vary_personality(args):
         if kept[opening] > args.keep:
             todo.append(c)
     log(f"{len(common)} common openings (>= {args.min_repeats}); rewriting {len(todo)} lines, keeping {args.keep} of each")
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
     avoid_text = "; ".join(f'"{a}"' for a in avoid)
 
     def job(c):
@@ -1091,7 +1091,7 @@ def vary_traits(args):
     unknown = [f for f in fields if f not in VARY_FIELDS]
     if unknown:
         sys.exit(f"unknown field {unknown[0]!r}; choose from {', '.join(VARY_FIELDS)}")
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
     rc = 0
     for field in fields:
         spec = VARY_FIELDS[field]
@@ -1559,7 +1559,7 @@ def crafts(args):
     """A trade and a household for every character that lacks one (plan 33)."""
     e = eras.get(args.era)
     ensure_schema()
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
     judge = None if args.no_judge else fleet.Judge()
     where = "1 = 1" if args.rewrite else "l.craft IS NULL"
     rows = life_rows(e, where=where,
@@ -1583,7 +1583,7 @@ def sample_crafts(args):
     """Print a working life for random characters on each lane; stores nothing."""
     e = eras.get(args.era)
     ensure_schema()
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
     judge = fleet.Judge()
     rows = life_rows(e, where="1 = 1", extra=f"ORDER BY RAND() LIMIT {len(lanes) * args.per_lane}")
     jobs = [(lanes[i % len(lanes)], c) for i, c in enumerate(rows)]
@@ -1635,7 +1635,7 @@ def generate(args):
     if int(other):
         sys.exit(f"{other} lore rows belong to another era; run `reset` first")
     tempers = temperaments()
-    lanes = fleet.pick_lanes(args.lanes, args.slots)
+    lanes = fleet.prefer_lanes(args.lanes, args.slots)
     judge = None if args.no_judge else fleet.Judge()
     pool = fleet.Pool(lanes, log=log)
     log(f"era {e['name']}; lanes: " + ", ".join(f"{l.name}x{l.slots}" for l in lanes)
@@ -1701,7 +1701,7 @@ def generate(args):
 def sample(args):
     e = eras.get(args.era)
     tempers = temperaments()
-    lanes = fleet.pick_lanes(args.lanes, args.slots)
+    lanes = fleet.prefer_lanes(args.lanes, args.slots)
     judge = fleet.Judge()
     bots = unguilded_bots(e, f"ORDER BY RAND() LIMIT {len(lanes)}")
 
@@ -1926,7 +1926,7 @@ def restand(args):
         return 0
     if args.dry_run:
         todo = todo[:args.show]
-    lanes = [l for l in fleet.pick_lanes(args.lanes, args.slots) if "traits" in l.kinds]
+    lanes = [l for l in fleet.prefer_lanes(args.lanes, args.slots) if "traits" in l.kinds]
     pool = fleet.Pool(lanes, log=lambda m: log(m) if "FAILED" in m or "pool finished" in m else None)
     for c in todo:
         pool.submit("traits", 1, lambda lane, attempt, c=c: gen_restand(lane, attempt, e, judge, c, args.dry_run, keep),
@@ -2225,7 +2225,7 @@ def alts(args):
     rows = alt_rows(e, names, getattr(args, "account", 0))
     if not rows:
         sys.exit("no alts found: is there a player_main row for the account?")
-    lane = fleet.pick_lanes(args.lanes)[0]
+    lane = fleet.prefer_lanes(args.lanes)[0]
     judge = None if args.no_judge else fleet.Judge()
     tempers = temperaments()
     rng = random.Random(args.seed)
@@ -2428,7 +2428,7 @@ def main_sheet(args):
                  f"calls its own -- name them first (GUIDE 10.5).")
     source = open(args.source, encoding="utf-8").read()
     anchors = [a.strip() for a in args.keep.split(",") if a.strip()]
-    lane = fleet.pick_lanes(args.lanes)[0]
+    lane = fleet.prefer_lanes(args.lanes)[0]
     judge = None if args.no_judge else fleet.Judge()
     log(f"{c['name']} ({RACES.get(c['race'])} {CLASSES.get(c['cls'])}, {eras.standing(c['level'], e)}) "
         f"on {lane.name}; keeping: {', '.join(anchors) or 'nothing named'}")

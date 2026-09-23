@@ -39,6 +39,8 @@ import os  # noqa: E402  (the loader below needs it; harmless if it is already i
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from common import site  # noqa: E402
 
+HERE = os.path.dirname(os.path.realpath(__file__))
+
 LIVE = "mod_ollama_chat_memories"
 ARCH = "mod_ollama_chat_memories_archive"
 TRIGGER = "trg_ollama_mem_archive"
@@ -130,6 +132,12 @@ def main():
     r.set_defaults(fn=cmd_run)
     sub.add_parser("status").set_defaults(fn=cmd_status)
     args = ap.parse_args()
+    # Make our own schema, the way every sibling service does (founding, rivalry, chronicler, market,
+    # regard, gen_places, gen_backstories). Nothing else in the repo ever applied archive_tables.sql --
+    # not db-init.sh, not seed-world.sh, not the guide -- so on this realm the table and trigger had
+    # been created by hand, and a fresh realm that enabled wow-memory-archive exactly as documented got
+    # a service failing every 60s against a table that did not exist. The file is idempotent by design.
+    sql(open(os.path.join(HERE, "archive_tables.sql")).read(), fetch=False)
     return args.fn(args)
 
 

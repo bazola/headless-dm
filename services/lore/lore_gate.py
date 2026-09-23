@@ -194,7 +194,7 @@ def shape(char, what, text, era_name, keep):
         said, _ = humanise(f"out-of-world term: '{bad.group(0)}'", era_name)
         return None, [said], []
 
-    lane = fleet.pick_lanes(DEFAULT_LANE)[0]
+    lane = fleet.prefer_lanes(DEFAULT_LANE)[0]
     judge = fleet.Judge()
 
     for attempt in range(1, fleet.MAX_ATTEMPTS + 1):
@@ -462,9 +462,9 @@ def name_main(guid, account):
 
 
 def _lanes():
-    lane = fleet.pick_lanes(DEFAULT_LANE)[0]
+    lane = fleet.prefer_lanes(DEFAULT_LANE)[0]
     # Traits come back as JSON, and the lanes say which of them can be trusted with it.
-    traits = next((l for l in fleet.pick_lanes(None) if "traits" in l.kinds), lane)
+    traits = next((l for l in fleet.prefer_lanes(None) if "traits" in l.kinds), lane)
     return lane, traits, fleet.Judge()
 
 
