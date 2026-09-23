@@ -391,8 +391,11 @@ sudo mysql < /opt/wow/tmp/db-init.sql
 
 Then delete the file: `rm /opt/wow/tmp/db-init.sql`.
 
-- **Keep these four database names.** mod-playerbots needs the fourth, and some upstream code checks
-  `acore_characters` by name.
+- **Keep these four database names.** mod-playerbots needs the fourth, and module code checks `acore_characters`
+  **by name**: `mod-ollama-chat/src/mod-ollama-chat_config.cpp:494` and `_personality.cpp:66` both query
+  `information_schema` with the schema name written into the C++. Rename the character database and the module
+  reports "Please source the required database table first" about a table that is sitting right there — measured
+  on a scratch realm using `s5_characters`, where the table existed and the check still failed.
 
 **Tuning** (above about 150 bots). Set `innodb_buffer_pool_size` in `ops/mysql/99-wow-tuning.cnf` to the Phase 1 value
 (G3):
