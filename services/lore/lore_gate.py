@@ -58,6 +58,12 @@ import era as eras          # noqa: E402
 import fleet                # noqa: E402
 import gen_backstories as g  # noqa: E402
 
+# A journey's story is written by the chronicler's scribes (plan 53); the gate only opens the door to
+# them. Nothing here knows how a story is made, and the gate is the door because mod-dashboard caps a
+# body at 1024 bytes and never answers a preflight -- the same reason everything else here is here.
+sys.path.insert(0, os.path.join(REPO, "services", "chronicler"))
+import journey_story as js  # noqa: E402
+
 def _site(key, default):
     """A gate setting: the environment first (systemd passes site.env through), then site/ itself,
     so running the gate by hand answers the same way the unit does (plan 23 W15)."""
@@ -693,6 +699,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(400, {"ok": False,
                                         "message": f"{char['name']} has no main to be bound to."})
             return self._send(200, {"ok": True, "options": options})
+        if self.path.startswith("/journey-legs"):
+            # The journeys one of your own characters has lived, and which of them have been written
+            # up. The page offers to write the ones that have not.
+            guid = (self._query().get("guid") or [""])[0]
+            if not guid.isdigit():
+                return self._send(400, {"ok": False, "message": "Say whose journey, by guid."})
+            who = _household_character(int(guid))
+            if not who:
+                return self._send(403, {"ok": False, "message":
+                                        "Stories are written for your own characters and their alts."})
+            return self._send(200, {"ok": True, "character": who["name"], "guid": int(guid),
+                                    "legs": js.legs_doc(int(guid))})
         if self.path.startswith("/job"):
             with _jobs_lock:
                 job = _jobs.get((self._query().get("id") or [""])[0])
@@ -718,6 +736,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._alt_job(body, keep=False)
         if self.path.startswith("/alt-keep"):
             return self._alt_job(body, keep=True)
+        if self.path.startswith("/journey-write"):
+            return self._journey_write(body)
 
         name = str(body.get("character", "")).strip()
         what = str(body.get("what", "")).strip()
@@ -833,6 +853,57 @@ class Handler(BaseHTTPRequestHandler):
                 [k.strip() for k in str(body.get("keep", "")).split(",") if k.strip()],
                 [k.strip() for k in str(body.get("keep_story", "")).split(",") if k.strip()]))
         return self._send(200, {"ok": True, "job": job["id"], "state": job["state"]})
+
+    # -- the story of a journey (plan 53) -----------------------------------
+
+    def _journey_write(self, body):
+        """Write up one journey. Long, so it answers with a job the page watches, exactly as the
+        alt flow does; the writing itself happens off the request thread."""
+        guid, start = body.get("guid"), body.get("start")
+        if not isinstance(guid, int) or not isinstance(start, (int, float)):
+            return self._send(400, {"ok": False, "message":
+                                    'Say which journey, like {"guid": 702, "start": 1789...}.'})
+        who = _household_character(guid)
+        if not who:
+            return self._send(403, {"ok": False, "message":
+                                    "Stories are written for your own characters and their alts."})
+        with _gate_lock:
+            if guid in _busy:
+                return self._send(429, {"ok": False,
+                                        "message": f"{who['name']} is already being written."})
+            _busy.add(guid)
+            _last_call[guid] = time.time()
+
+        job = _new_job(dict(guid=guid, name=who["name"]), "journey")
+        job["start"] = float(start)
+        _start(job, lambda j: _journey_job(j, guid, float(start)))
+        return self._send(200, {"ok": True, "job": job["id"], "state": job["state"]})
+
+
+def _journey_job(job, guid, start):
+    _step(job, "Reading what they did, and who was beside them.")
+    out = js.write_story(guid, start, ERA, step=lambda said: _step(job, said))
+    job["story"] = out
+    _finish(job, "done", f"{out['title']} - {out['words']} words.")
+
+
+def _household_character(guid):
+    """One of the player's own: their main, or an alt of it.
+
+    A story is written only for these (the operator's choice, plan 53) -- but everyone who travelled
+    with them is named inside it, which is why the generator takes the company from the ledger rather
+    than from this test. A wandering bot is a companion in someone's story, never the subject of one.
+    """
+    rows = g.sql("SELECT c.name, pk.kind, COALESCE(pk.main_guid, 0), c.account FROM characters c "
+                 "JOIN person_kind pk ON pk.guid = c.guid "
+                 f"WHERE c.guid = {int(guid)} AND pk.kind IN ('main', 'alt')")
+    if not rows:
+        return None
+    name, kind, main_guid, account = rows[0][0], rows[0][1], int(rows[0][2]), int(rows[0][3])
+    allowed = ACCOUNTS or allowed_accounts()
+    if allowed and account not in allowed:
+        return None
+    return dict(guid=int(guid), name=name, kind=kind, main_guid=main_guid)
 
 
 def _constant_eq(a, b):

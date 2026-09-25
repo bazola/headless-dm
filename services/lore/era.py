@@ -18,7 +18,7 @@ BASE_META = (r"level(ed|s)?\s*\d+|lvl|xp|experience points|dps|spec|talent tree|
              # After the war against the Lich King. (Kul Tiras and the Zandalar tribe are older.)
              r"broken isles|suramar|legion invasion|deathwing|pandaria|"
              r"azerite|shadowlands|warchief garrosh|warchief sylvanas|warchief vol'jin|"
-             r"garrosh hellscream's horde|garrosh's madness|siege of orgrimmar|void elf|nightborne")
+             r"garrosh hellscream's horde|garrosh's madness|siege of orgrimmar|void elf|nightborne|highmountain")
 
 CLASSIC_SETTING = (
     "Azeroth in the uneasy years after the Third War. The orcs came through the Dark Portal a generation "
@@ -50,7 +50,7 @@ ERAS = {
                       "Blackrock clans"},
         races={1, 2, 3, 4, 5, 6, 7, 8},
         classes={1, 2, 3, 4, 5, 7, 8, 9, 11},
-        meta_extra=(r"northrend|icecrown|wrathgate|angrathar|borean tundra|howling fjord|dragonblight|"
+        meta_extra=(r"northrend|icecrown|wrathgate|angrathar|borean tundra|warsong hold|howling fjord|dragonblight|"
                     r"grizzly hills|zul'drak|sholazar|storm peaks|crystalsong|wintergrasp|ulduar|"
                     r"argent crusade|ebon blade|ebon hold|acherus|"
                     r"outland|hellfire peninsula|hellfire citadel|shattrath|zangarmarsh|terokkar|netherstorm|"
@@ -63,6 +63,9 @@ ERAS = {
                     # Silvermoon ruins". Ruined Quel'Thalas itself stays legitimate; only the city is banned.
                     r"silvermoon|"
                     r"scarlet enclave|dead scar|eversong|ghostlands|tranquillien|"
+                    # Found drafting the capitals' almanac, 2026-09-24: the Spire stands in Eversong (a seedless
+                    # Thunder Bluff put it on the mesa), and the Harbor and the Ring came with the Lich King's war.
+                    r"windrunner spire|stormwind harbor|ring of valor|"
                     # Darnassus and Teldrassil stand in this age. Their burning is the War of the Thorns, ages
                     # later; a run on 2026-09-16 had a night elf watch "the fires of Darnassus burn" and both the
                     # regex and the judge let it through. The city's name alone is legitimate, only its burning.

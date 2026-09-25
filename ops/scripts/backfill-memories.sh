@@ -4,11 +4,28 @@
 # Who keeps deed memories LIVE is a separate question, set by OllamaChat.Memory.EventCompanionsOnly in the
 # module config (0 = the whole world). This script only writes the retrospective ones.
 #
-# WHY THIS STOPS THE SERVER. Memory_SaveAll deletes every dirty bot's rows and reinserts them from RAM
-# (mod-ollama-chat_memory.cpp:444), and Memory_Load reads the table at startup ONLY. So rows written
-# underneath a running worldserver are wiped the moment that bot next forms a memory -- and the shutdown
-# save wipes them too, which is why "write it, then restart" does not work either. The only safe order is
-# down, write, up: the memories are then read in at boot and the module owns them from there.
+# THE REALM NO LONGER HAS TO BE DOWN FOR THIS (corrected 2026-09-25, plans/52 W1).
+#
+# What this said before was true when it was written and has been false since plan 41 M2 made the save
+# INSERT-ONLY. The old warning claimed Memory_SaveAll deletes a dirty bot's rows and reinserts them from
+# RAM, so anything written underneath a running worldserver was wiped. Read the module today and none of
+# that holds:
+#
+#   * the only statements the module makes against mod_ollama_chat_memories are two SELECTs and one
+#     INSERT (memory.cpp:275 startup load, :533 AppendBotSave, :612 per-bot load). No DELETE. No UPDATE.
+#   * rows read back out of the table are marked persisted = true ("it came out of the table; never
+#     insert it again"), and AppendBotSave skips them -- so a row this script writes, rewrites or
+#     DELETES cannot be resurrected by the server.
+#   * Memory_LoadBot re-reads on login, and a bot that logs out has its state erased, so the change
+#     reaches each bot as the fleet rotates. A restart is an accelerant, never a requirement.
+#
+# The one real consequence of running live is LATENCY: a bot that stays logged in keeps its old copy in
+# its head until it next rotates. Nothing is lost, it just has not noticed yet.
+#
+# The stop/start below is therefore no longer required. It is left in as belt-and-braces because this
+# script is the one that writes thousands of rows at once, and because taking it out is a behaviour
+# change nobody has asked for yet. To drop it: remove the "stopping wow-world" block, the bring_up
+# function and its trap, and this paragraph with them.
 #
 # Usage:   ops/scripts/backfill-memories.sh
 #          SINCE='2026-09-14 00:00:00' ops/scripts/backfill-memories.sh    # a different window
@@ -45,8 +62,9 @@ sed -i 's/^OllamaChat\.Memory\.EventEnable = 0$/OllamaChat.Memory.EventEnable = 
 grep -n '^OllamaChat\.Memory\.EventEnable' "$CONF"
 
 say "pruning the junk the fleet-wide first run left behind"
-# Only safe here, with the realm down. Memory_SaveAll reinserts a dirty bot's rows from RAM, so a row
-# deleted under a running server comes back -- and the shutdown save would undo it too.
+# This is safe with the realm up too, and the reason it once was not is gone: a deleted row is not
+# reinserted, because the copy in that bot's head is marked persisted and AppendBotSave skips it. The bot
+# simply goes on using the deleted memory until it next logs out and back in.
 cd "$REPO" || exit 1
 python3 services/memory/recall.py prune-events --apply
 
