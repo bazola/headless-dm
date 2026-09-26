@@ -26,6 +26,13 @@ and caps bodies at 1024 bytes, which is why this is a separate door):
   POST /draft                shape and check the text. STORES NOTHING. Returns prose + reasons
   POST /alt-keep             store what /alt-write returned, then traits, regard, project, publish
   POST /commit               store an accepted draft, then republish lore-edit.json
+  GET  /voice?guid=|name=    a character's voice if they have one, and who they are (plan 57)
+  POST /voice-suggest        a voice description written from who they are. STORES NOTHING
+  POST /voice-sample         design a voice from a description and let it speak. A candidate only
+  POST /voice-accept         the candidate becomes their voice, locked for good
+  POST /voice-decline        throw a candidate away
+  POST /voice-line           one line said in their locked voice, cached forever
+  POST /voice-export         a section's recorded lines as a zip: files, two mixed tracks, subtitles
 
 Nothing here touches a game object: it runs outside the worldserver like regard and the chronicler,
 and writes only the lore tables. Lore reaches prompts after `gen_backstories.py project` and a
@@ -63,6 +70,7 @@ import gen_backstories as g  # noqa: E402
 # body at 1024 bytes and never answers a preflight -- the same reason everything else here is here.
 sys.path.insert(0, os.path.join(REPO, "services", "chronicler"))
 import journey_story as js  # noqa: E402
+import voices               # noqa: E402
 
 def _site(key, default):
     """A gate setting: the environment first (systemd passes site.env through), then site/ itself,
@@ -711,6 +719,10 @@ class Handler(BaseHTTPRequestHandler):
                                         "Stories are written for your own characters and their alts."})
             return self._send(200, {"ok": True, "character": who["name"], "guid": int(guid),
                                     "legs": js.legs_doc(int(guid))})
+        if self.path.startswith("/voice"):
+            q = self._query()
+            return self._voice(lambda: voices.state(voices.resolve(
+                (q.get("guid") or [None])[0], (q.get("name") or [None])[0])))
         if self.path.startswith("/job"):
             with _jobs_lock:
                 job = _jobs.get((self._query().get("id") or [""])[0])
@@ -738,6 +750,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._alt_job(body, keep=True)
         if self.path.startswith("/journey-write"):
             return self._journey_write(body)
+        if self.path.startswith("/voice-"):
+            return self._voice_post(body)
 
         name = str(body.get("character", "")).strip()
         what = str(body.get("what", "")).strip()
@@ -854,6 +868,48 @@ class Handler(BaseHTTPRequestHandler):
                 [k.strip() for k in str(body.get("keep_story", "")).split(",") if k.strip()]))
         return self._send(200, {"ok": True, "job": job["id"], "state": job["state"]})
 
+    # -- voices (plan 57) ----------------------------------------------------
+
+    def _voice(self, fn):
+        try:
+            return self._send(200, dict(ok=True, **fn()))
+        except voices.VoiceError as err:
+            return self._send(err.status, {"ok": False, "message": str(err)})
+        except Exception as err:                 # noqa: BLE001 - a voice fault answers, it never drops the line
+            log(f"voice: {self.path}: {err!r}")
+            return self._send(500, {"ok": False, "message": f"The voice broke off: {err}"})
+
+    def _voice_post(self, body):
+        # Every speaker in a journey may be cast, not only the household: the voice belongs to whoever
+        # said the line. The token is the door, as it is for everything here (the trusted realm, 43 §2).
+        def run():
+            # Off means off: no local model is asked for a description and nothing is spent, whatever
+            # the page thinks. Only export still answers, since it reads audio already on disk.
+            if not voices.enabled() and not self.path.startswith("/voice-export"):
+                raise voices.VoiceError(voices.off_reason(), 503)
+            if self.path.startswith("/voice-export"):
+                guid = None
+            else:
+                guid = voices.resolve(body.get("guid"), body.get("name"))
+            if self.path.startswith("/voice-suggest"):
+                return dict(style=voices.suggest(guid))
+            if self.path.startswith("/voice-sample"):
+                return voices.sample(guid, str(body.get("style", "")), str(body.get("text", "")).strip() or None)
+            if self.path.startswith("/voice-accept"):
+                return dict(voice=voices.accept(guid, body.get("sample")))
+            if self.path.startswith("/voice-decline"):
+                voices.decline(guid, body.get("sample"))
+                return {}
+            if self.path.startswith("/voice-export"):
+                lines = body.get("lines")
+                if not isinstance(lines, list) or not lines:
+                    raise voices.VoiceError("Say which lines, in order.")
+                return voices.export(lines, str(body.get("title", ""))[:120])
+            if self.path.startswith("/voice-line"):
+                return voices.line(guid, str(body.get("text", "")))
+            raise voices.VoiceError("No such door.", 404)
+        return self._voice(run)
+
     # -- the story of a journey (plan 53) -----------------------------------
 
     def _journey_write(self, body):
@@ -947,6 +1003,14 @@ def main():
     ERA = args.era
     ACCOUNTS = [int(a) for a in args.accounts.replace(",", " ").split() if a.strip().isdigit()]
     g.ensure_schema()
+    # Voices are optional (plan 57). Whatever goes wrong setting them up, the rest of the gate -- lore,
+    # alts, stories -- must still open.
+    try:
+        voices.ensure_schema()
+        log("voices: " + (voices.off_reason() or f"on ({voices.MODEL}, key {voices.KEY_ENV})"))
+    except Exception as err:                    # noqa: BLE001
+        log(f"voices: could not be set up, so they stay off: {err!r}")
+        voices.disable(repr(err))
     log(f"writing for accounts: {ACCOUNTS or allowed_accounts()}")
 
     if args.publish_only:

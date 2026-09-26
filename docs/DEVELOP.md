@@ -15,7 +15,7 @@ git clone --recursive -b develop https://github.com/bazola/headless-dm.git
 ```
 
 The `mod-dashboard` submodule is pinned on this branch to **its own `develop` commit**, so a recursive
-clone gets the dashboard's half of the journey stories with it. `.gitmodules` still names `main` as
+clone gets the dashboard's half of the journey stories and the voices with it. `.gitmodules` still names `main` as
 that submodule's branch, which is right for `main` and wrong here: `git submodule update --remote`
 would walk the dashboard back to `main` and the Stories button would vanish. Use plain
 `git submodule update`, which follows the pin.
@@ -121,7 +121,55 @@ If you have been following the old instruction, you can stop.
 
 ---
 
-## 4. New configuration keys
+## 4. Voices: a journey read aloud (optional)
+
+**Off unless you set a speech key.** A realm with no key sees its Journey view exactly as before: no
+speakers, no voice controls, and the gate's voice doors refuse without calling any model.
+
+With a key, every line of talk in the Journey view gets a small speaker:
+
+- **The first time a character is heard, you cast them.** A local batch model writes a description of how
+  they sound from their race, class, sex and personality; you edit it, hear a sample, and accept or
+  decline. An accepted sample *is* the voice: every later line is cloned from it, so **it is locked** and
+  never changes. There is no re-cast yet.
+- **The speaker shows the state:** a faint ring for no voice yet, plain for a voice whose line is not
+  recorded, solid for a recorded line. A recorded line plays from disk, with no call and no cost.
+- **Each section** of the journey shows how many of its lines are recorded. **Record the rest** casts
+  anyone still voiceless (by hand, one at a time; closing a caster skips them) and records the rest.
+  A complete section gets **Play all**, which reads it through in order, and **Download**, a zip of every
+  line as its own file, the section as one track twice (as it happened, and back to back), subtitles for
+  both, and a manifest, for laying over video.
+
+**The engine** is Fish S2.1 Pro through OpenRouter's speech endpoint, about $15 per million characters
+(a typical line is a fraction of a cent). It is the one model there that both designs a voice from words
+and clones from a clip; the others have fixed voices or ignore a description. Fish does not always honour
+a character's sex, so every sample is pitch-checked and remade, up to six times, until it fits; if none
+does, the caster says so.
+
+### Turning it on
+
+```bash
+# site/secrets.env
+OPENROUTER_API_KEY=sk-or-...
+
+# optional, in site/site.env
+#VOICE_KEY_ENV=OPENROUTER_API_KEY   # which secrets.env key to bill
+#VOICE_MODEL=fish-audio/s2.1-pro
+#VOICE_ENABLED=0                    # force voices off even with a key
+```
+
+Then restart the lore gate. **Download needs `ffmpeg`** on the server (`sudo apt install ffmpeg`).
+
+### What it stores
+
+- Tables `character_voice` and `voice_line` in the characters schema, created by the gate on start.
+- Reference clips in `DATA_DIR/voices/` (not served). Recorded lines, samples and downloads in
+  `DATA_DIR/dashboard-data/voices/`, which the dashboard serves; `index.json` there tells the page which
+  lines are recorded. Unaccepted samples and downloads are swept after a day.
+
+---
+
+## 5. New configuration keys
 
 In `conf/mod_ollama_chat.overrides`. All of them are ignored by a worldserver built from `main`, so the
 conf is safe to carry either way.
@@ -139,14 +187,14 @@ A conf change needs `.ollama reload` on the worldserver console, except where th
 
 ---
 
-## 5. Also on this branch
+## 6. Also on this branch
 
 - `services/lore/era.py` — a few more later-age names the era gate should catch.
 - `services/lore/gen_places.py` — the place almanac's generator, considerably extended.
 - `services/regard/areas.py` — reads zone names from `AreaTable.dbc`, which is the only complete source
   of place names on the box (the `*_dbc` tables ship empty; the core reads the files directly).
 
-## 6. Known rough edges
+## 7. Known rough edges
 
 - Nothing writes a story unattended. Every one is a button press or a command, on purpose: a household
   with dozens of journeys is real inference time.
