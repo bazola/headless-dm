@@ -2,8 +2,9 @@
 -- Lives in the characters schema beside the lore tables. The audio itself is on disk, never here.
 
 -- One row per character who has been given a voice. A row is written only when the player accepts a
--- sample, and it is never rewritten: the accepted sample IS the voice, and every later line is cloned
--- from it, so changing this row would change how everything they have ever said sounds.
+-- sample: the accepted sample IS the voice, and every later line is cloned from it. It is rewritten only
+-- when the player asks to change the voice (the Journey page's "Change voice"); the lines recorded in the
+-- old one then go stale (voice_line.ref_sha1 no longer matches) until they are recorded again.
 CREATE TABLE IF NOT EXISTS character_voice (
     guid         INT UNSIGNED NOT NULL,
     name         VARCHAR(12)  NOT NULL,
@@ -26,6 +27,7 @@ CREATE TABLE IF NOT EXISTS voice_line (
     text         VARCHAR(1000) NOT NULL COMMENT 'What was spoken, after clean-up',
     raw_text     VARCHAR(1000) NULL     COMMENT 'The line as the journey file holds it; what the page looks it up by',
     file         VARCHAR(255) NOT NULL COMMENT 'Relative to dashboard-data/',
+    ref_sha1     CHAR(40)     NULL     COMMENT 'The reference clip it was cloned from; a line whose clip is not the voice now is stale',
     chars        INT UNSIGNED NOT NULL COMMENT 'Characters billed',
     created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (cache_key),

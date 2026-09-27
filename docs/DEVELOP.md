@@ -130,8 +130,12 @@ With a key, every line of talk in the Journey view gets a small speaker:
 
 - **The first time a character is heard, you cast them.** A local batch model writes a description of how
   they sound from their race, class, sex and personality; you edit it, hear a sample, and accept or
-  decline. An accepted sample *is* the voice: every later line is cloned from it, so **it is locked** and
-  never changes. There is no re-cast yet.
+  decline. An accepted sample *is* the voice: every later line is cloned from it, so it never drifts.
+- **A voice changes only when you ask.** **Change voice**, beside the name at the top of a journey, opens
+  the caster with their voice now beside it and the words that made it in the box. Keep a new one and the
+  lines already recorded in the old voice are listed below: **Re-record all** says them again in the new
+  voice (with a Stop), or do them one at a time. Until a line is redone it counts as unrecorded, so a
+  section never mixes two voices. The old voice is not kept, so there is no undo.
 - **The speaker shows the state:** a faint ring for no voice yet, plain for a voice whose line is not
   recorded, solid for a recorded line. A recorded line plays from disk, with no call and no cost.
 - **Each section** of the journey shows how many of its lines are recorded. **Record the rest** casts
@@ -165,7 +169,8 @@ Then restart the lore gate. **Download needs `ffmpeg`** on the server (`sudo apt
 - Tables `character_voice` and `voice_line` in the characters schema, created by the gate on start.
 - Reference clips in `DATA_DIR/voices/` (not served). Recorded lines, samples and downloads in
   `DATA_DIR/dashboard-data/voices/`, which the dashboard serves; `index.json` there tells the page which
-  lines are recorded. Unaccepted samples and downloads are swept after a day.
+  lines are recorded, in the voice each speaker has now (`voice_line.ref_sha1`). Unaccepted samples and
+  downloads are swept after a day.
 
 ---
 

@@ -5,8 +5,13 @@ The flow the Journey page drives through the lore gate:
   who(guid)          what the caster needs to know: race, class, sex, temperament, personality
   suggest(guid)      a local model writes a voice description from those; the player may rewrite it
   sample(guid, ...)  Fish designs a voice from the description and says a line with it -> a candidate
-  accept(guid, id)   the candidate becomes the character's reference clip. LOCKED from here on
+  accept(guid, id)   the candidate becomes the character's reference clip, and stays theirs
   line(guid, text)   any later line is a clone of that clip, cached forever by (model, clip, text)
+
+A voice changes only when the player asks for it by name (the Journey page's "Change voice"): the same
+sample-and-accept, with recast set. Nothing else ever rewrites a voice. The lines recorded in the old voice
+are then stale: they stop being offered to the page, and each is replaced, and its file removed, when it is
+recorded again in the new one. Until then `state()` lists them, so the page can re-record them all.
 
 Why Fish S2.1 Pro through OpenRouter, and not the Qwen TTS the operator first named (measured 2026-09-26):
 qwen/qwen-audio-3.0-tts-plus has two fixed voices and returns byte-identical audio whatever style it is
@@ -84,6 +89,15 @@ def ensure_schema():
         g.sql("ALTER TABLE voice_line ADD COLUMN raw_text VARCHAR(1000) NULL "
               "COMMENT 'The line as the journey file holds it; what the page looks it up by' AFTER text",
               fetch=False)
+    # Which clip a line was cloned from, so a changed voice can tell its old lines from its new ones.
+    # Every row before this column existed was made from the one clip its speaker has ever had.
+    if not g.sql("SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() "
+                 "AND table_name = 'voice_line' AND column_name = 'ref_sha1'"):
+        g.sql("ALTER TABLE voice_line ADD COLUMN ref_sha1 CHAR(40) NULL "
+              "COMMENT 'The reference clip it was cloned from; a line whose clip is not the voice now is stale' "
+              "AFTER file", fetch=False)
+        g.sql("UPDATE voice_line vl JOIN character_voice cv ON cv.guid = vl.guid SET vl.ref_sha1 = cv.ref_sha1 "
+              "WHERE vl.ref_sha1 IS NULL", fetch=False)
     for key, guid, said in g.sql("SELECT cache_key, guid, " + g._flat("text") + " FROM voice_line "
                                  "WHERE raw_text IS NULL"):
         for (raw,) in g.sql("SELECT " + g._flat("text") + f" FROM ledger_chat WHERE speaker_guid = {int(guid)} "
@@ -101,6 +115,8 @@ def _exact(text):
 
 
 INDEX = os.path.join(WEB_DIR, "index.json")
+# Lines cloned from the voice their speaker has now. A line from a voice since changed is not offered.
+_CURRENT = "JOIN character_voice cv ON cv.guid = vl.guid AND cv.ref_sha1 = vl.ref_sha1"
 _index_lock = threading.Lock()
 
 
@@ -111,8 +127,8 @@ def publish():
     doc = dict(generated=int(time.time()), enabled=enabled(), voices={}, lines={})
     for guid, name in g.sql("SELECT guid, name FROM character_voice"):
         doc["voices"][guid] = name
-    for guid, raw, said, rel in g.sql("SELECT guid, " + g._flat("raw_text") + ", " + g._flat("text")
-                                      + ", file FROM voice_line ORDER BY created_at"):
+    for guid, raw, said, rel in g.sql("SELECT vl.guid, " + g._flat("vl.raw_text") + ", " + g._flat("vl.text")
+                                      + ", vl.file FROM voice_line vl " + _CURRENT + " ORDER BY vl.created_at"):
         doc["lines"].setdefault(guid, {})[raw or said] = "data/" + rel
     with _index_lock:
         _write(INDEX, json.dumps(doc, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
@@ -156,18 +172,32 @@ def who(guid):
 
 def voice_of(guid):
     rows = g.sql("SELECT name, gender, " + g._flat("style") + ", " + g._flat("sample_text")
-                 + f", ref_file, model, UNIX_TIMESTAMP(created_at) FROM character_voice WHERE guid = {int(guid)}")
+                 + f", ref_file, ref_sha1, model, UNIX_TIMESTAMP(created_at) FROM character_voice WHERE guid = {int(guid)}")
     if not rows:
         return None
     r = rows[0]
+    # The cast file is named after the clip, so a changed voice is a new URL and no browser plays the old one.
     return dict(guid=int(guid), name=r[0], gender=int(r[1]), style=r[2], sample_text=r[3],
-                ref_file=r[4], model=r[5], created=int(r[6]), locked=True,
-                sample_url=f"data/voices/cast/{int(guid)}.wav")
+                ref_file=r[4], ref_sha1=r[5], model=r[6], created=int(r[7]), locked=True,
+                sample_url=f"data/voices/cast/{r[4]}")
+
+
+def lines_of(guid):
+    """Every line they have had recorded, oldest first: its words as the journey holds them, and whether it
+    is in the voice they have now (`current`) or one since changed (stale, and waiting to be said again)."""
+    out = []
+    for raw, said, rel, current, chars in g.sql(
+            "SELECT " + g._flat("vl.raw_text") + ", " + g._flat("vl.text") + ", vl.file, "
+            "IFNULL(vl.ref_sha1 = cv.ref_sha1, 0), vl.chars FROM voice_line vl "
+            f"LEFT JOIN character_voice cv ON cv.guid = vl.guid WHERE vl.guid = {int(guid)} ORDER BY vl.created_at"):
+        out.append(dict(text=raw or said, url="data/" + rel, current=current == "1", chars=int(chars)))
+    return out
 
 
 def state(guid):
-    """What the page opens with: the voice if there is one, and always who they are."""
-    return dict(who=who(guid), voice=voice_of(guid), model=MODEL, sample_text=sample_text(guid), enabled=enabled())
+    """What the page opens with: the voice if there is one, every line recorded, and always who they are."""
+    return dict(who=who(guid), voice=voice_of(guid), lines=lines_of(guid), model=MODEL,
+                sample_text=sample_text(guid), enabled=enabled())
 
 
 # ---------------------------------------------------------------------------
@@ -386,11 +416,12 @@ def _sweep_samples():
             pass
 
 
-def sample(guid, style, text=None):
-    """Design a voice from words and let it speak. Stores nothing but a candidate file."""
+def sample(guid, style, text=None, recast=False):
+    """Design a voice from words and let it speak. Stores nothing but a candidate file. A character who
+    has a voice gets a sample only when the player has asked to change it (`recast`)."""
     guid = int(guid)
-    if voice_of(guid):
-        raise VoiceError("They already have a voice, and it stays.", 409)
+    if voice_of(guid) and not recast:
+        raise VoiceError("They already have a voice. Use Change voice to give them another.", 409)
     style = clean_style(style)
     if len(style.split()) < 3:
         raise VoiceError("Describe the voice in a few words first.")
@@ -437,8 +468,11 @@ def _sample_id(guid, sid):
     return sid
 
 
-def accept(guid, sid):
-    """The sample becomes the voice. From here every line they say is a clone of this clip."""
+def accept(guid, sid, recast=False):
+    """The sample becomes the voice. From here every line they say is a clone of this clip.
+
+    With `recast`, it replaces the voice they have: the lines recorded in the old one go stale (the page
+    stops offering them and lists them to be said again), and the old clip is removed."""
     guid = int(guid)
     sid = _sample_id(guid, sid)
     src = os.path.join(SAMPLE_DIR, sid + ".wav")
@@ -447,18 +481,33 @@ def accept(guid, sid):
         raise VoiceError("That sample is gone; make another.", 410)
     w = who(guid)
     with _lock(guid):
-        if voice_of(guid):
-            raise VoiceError("They already have a voice, and it stays.", 409)
+        old = voice_of(guid)
+        if old and not recast:
+            raise VoiceError("They already have a voice. Use Change voice to give them another.", 409)
         info = json.load(open(meta))
         data = open(src, "rb").read()
-        ref = f"{guid}.wav"
+        sha = hashlib.sha1(data).hexdigest()
+        # A first voice keeps the plain name; a changed one is named after its clip, so its URL is new.
+        ref = f"{guid}-{sha[:10]}.wav" if old else f"{guid}.wav"
         _write(os.path.join(REF_DIR, ref), data)
         _write(os.path.join(CAST_DIR, ref), data)
-        g.sql("INSERT INTO character_voice (guid, name, gender, style, sample_text, ref_file, ref_sha1, model) "
-              f"VALUES ({guid}, {g.q(w['name'])}, {w['gender']}, {g.q(info['style'])}, {g.q(info['text'])}, "
-              f"{g.q(ref)}, '{hashlib.sha1(data).hexdigest()}', {g.q(MODEL)})", fetch=False)
+        if old:
+            g.sql(f"UPDATE character_voice SET name = {g.q(w['name'])}, gender = {w['gender']}, "
+                  f"style = {g.q(info['style'])}, sample_text = {g.q(info['text'])}, ref_file = {g.q(ref)}, "
+                  f"ref_sha1 = '{sha}', model = {g.q(MODEL)}, created_at = NOW() WHERE guid = {guid}", fetch=False)
+            if old["ref_file"] != ref:
+                for d in (REF_DIR, CAST_DIR):
+                    try:
+                        os.remove(os.path.join(d, old["ref_file"]))
+                    except OSError:
+                        pass
+        else:
+            g.sql("INSERT INTO character_voice (guid, name, gender, style, sample_text, ref_file, ref_sha1, model) "
+                  f"VALUES ({guid}, {g.q(w['name'])}, {w['gender']}, {g.q(info['style'])}, {g.q(info['text'])}, "
+                  f"{g.q(ref)}, '{sha}', {g.q(MODEL)})", fetch=False)
         decline(guid, sid)
-    g.log(f"voices: {w['name']} ({guid}) cast as: {info['style']}")
+    g.log(f"voices: {w['name']} ({guid}) " + (f"recast (was: {old['style']}) as: " if old else "cast as: ")
+          + info["style"])
     publish()
     return voice_of(guid)
 
@@ -479,10 +528,13 @@ def line(guid, text):
         raise VoiceError(f"That is too long to say in one breath ({len(said)} characters).")
     ref_path = os.path.join(REF_DIR, v["ref_file"])
     ref = open(ref_path, "rb").read()
-    key = hashlib.sha1(f"{MODEL}\n{hashlib.sha1(ref).hexdigest()}\n{said}".encode()).hexdigest()
+    ref_sha = hashlib.sha1(ref).hexdigest()
+    key = hashlib.sha1(f"{MODEL}\n{ref_sha}\n{said}".encode()).hexdigest()
     rel = f"voices/lines/{key}.mp3"
     path = os.path.join(WEB_ROOT, rel)
     if os.path.exists(path):
+        if _drop_stale(guid, said, ref_sha):
+            publish()
         return dict(url="data/" + rel, cached=True, text=said, guid=guid)
     with _lock(guid):
         if not os.path.exists(path):
@@ -490,11 +542,26 @@ def line(guid, text):
                 {"type": "input_audio", "input_audio": {"data": base64.b64encode(ref).decode(), "format": "wav"}},
                 {"type": "text", "text": v["sample_text"]}]))
             _write(path, data)
-            g.sql("INSERT IGNORE INTO voice_line (cache_key, guid, text, raw_text, file, chars) VALUES "
-                  f"('{key}', {guid}, {g.q(said[:1000])}, {_exact(str(text)[:1000])}, {g.q(rel)}, {len(said)})",
-                  fetch=False)
+            g.sql("INSERT IGNORE INTO voice_line (cache_key, guid, text, raw_text, file, ref_sha1, chars) VALUES "
+                  f"('{key}', {guid}, {g.q(said[:1000])}, {_exact(str(text)[:1000])}, {g.q(rel)}, '{ref_sha}', "
+                  f"{len(said)})", fetch=False)
+            _drop_stale(guid, said, ref_sha)
             publish()
     return dict(url="data/" + rel, cached=False, text=said, guid=guid)
+
+
+def _drop_stale(guid, said, ref_sha):
+    """The same line in an old voice, now said in the new one: the old take goes, row and file."""
+    where = (f"WHERE guid = {int(guid)} AND text = {g.q(said[:1000])} "
+             f"AND (ref_sha1 IS NULL OR ref_sha1 <> '{ref_sha}')")
+    rows = g.sql(f"SELECT cache_key, file FROM voice_line {where}")
+    for key, rel in rows:
+        try:
+            os.remove(os.path.join(WEB_ROOT, rel))
+        except OSError:
+            pass
+        g.sql(f"DELETE FROM voice_line WHERE cache_key = '{key}'", fetch=False)
+    return len(rows)
 
 
 # ---------------------------------------------------------------------------
@@ -555,7 +622,8 @@ def export(lines, title):
     names, recorded = {}, {}
     for guid, name in g.sql("SELECT guid, name FROM characters WHERE guid IN (SELECT guid FROM voice_line)"):
         names[int(guid)] = name
-    for guid, raw, rel in g.sql("SELECT guid, " + g._flat("raw_text") + ", file FROM voice_line"):
+    for guid, raw, rel in g.sql("SELECT vl.guid, " + g._flat("vl.raw_text") + ", vl.file FROM voice_line vl "
+                                + _CURRENT):
         recorded[(int(guid), raw)] = rel
 
     items, missing = [], []

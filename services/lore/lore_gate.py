@@ -29,7 +29,8 @@ and caps bodies at 1024 bytes, which is why this is a separate door):
   GET  /voice?guid=|name=    a character's voice if they have one, and who they are (plan 57)
   POST /voice-suggest        a voice description written from who they are. STORES NOTHING
   POST /voice-sample         design a voice from a description and let it speak. A candidate only
-  POST /voice-accept         the candidate becomes their voice, locked for good
+                             (recast: true for a character who already has one: Change voice)
+  POST /voice-accept         the candidate becomes their voice (recast: true replaces the one they have)
   POST /voice-decline        throw a candidate away
   POST /voice-line           one line said in their locked voice, cached forever
   POST /voice-export         a section's recorded lines as a zip: files, two mixed tracks, subtitles
@@ -894,9 +895,11 @@ class Handler(BaseHTTPRequestHandler):
             if self.path.startswith("/voice-suggest"):
                 return dict(style=voices.suggest(guid))
             if self.path.startswith("/voice-sample"):
-                return voices.sample(guid, str(body.get("style", "")), str(body.get("text", "")).strip() or None)
+                return voices.sample(guid, str(body.get("style", "")), str(body.get("text", "")).strip() or None,
+                                     recast=body.get("recast") is True)
             if self.path.startswith("/voice-accept"):
-                return dict(voice=voices.accept(guid, body.get("sample")))
+                voice = voices.accept(guid, body.get("sample"), recast=body.get("recast") is True)
+                return dict(voice=voice, lines=voices.lines_of(guid))
             if self.path.startswith("/voice-decline"):
                 voices.decline(guid, body.get("sample"))
                 return {}
