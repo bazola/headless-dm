@@ -136,7 +136,13 @@ def revise_entry(lane, attempt, e, judge, entry, results, key, review_lock):
         instruction=("It contains things that are not true in this time, so it must be rewritten." if forced else
                      "If everything in it is already true in this time, reply exactly KEEP."),
         keep_clause="" if forced else ", or KEEP")
-    out = lane.chat([{"role": "user", "content": prompt}], 400, temperature=0.4)
+    out = lane.chat([{"role": "user", "content": prompt}], 400, temperature=0.4,
+        context={
+            "purpose": "knowledge_rewrite",
+            "source": "lore/rag_inworld.py",
+            "stage": "revise_entry",
+            "route": "batch",
+        })
     keep = not forced and out.strip().upper().startswith("KEEP")
     text = entry["content"] if keep else re.sub(r"\s+", " ", out).strip()
     if not keep and len(text) < 60:

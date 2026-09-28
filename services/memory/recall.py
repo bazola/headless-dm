@@ -258,7 +258,13 @@ def backfill(args):
         def run(lane, attempt):
             text = lane.chat([{"role": "user",
                                "content": prompt_template.format(bot_name=c["name"], history=c["history"])}],
-                             400, temperature=0.7)
+                             400, temperature=0.7,
+                                 context={
+                                     "purpose": "memory_backfill",
+                                     "source": "memory/recall.py",
+                                     "stage": "backfill.job.run",
+                                     "route": "batch",
+                                 })
             got = parse_memories(text.translate(ASCII_PUNCT))
             if not got:
                 return "nothing worth keeping"
@@ -513,7 +519,13 @@ def events_backfill(args):
             text = lane.chat([{"role": "user",
                                "content": template.format(bot_name=o["name"], company=o["company"],
                                                           events=o["events"])}],
-                             400, temperature=0.7)
+                             400, temperature=0.7,
+                                 context={
+                                     "purpose": "event_digest",
+                                     "source": "memory/recall.py",
+                                     "stage": "events_backfill.job.run",
+                                     "route": "batch",
+                                 })
             got = parse_memories(text.translate(ASCII_PUNCT))
             if not got:
                 return "nothing worth keeping"

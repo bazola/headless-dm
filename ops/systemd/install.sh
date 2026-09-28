@@ -2,7 +2,7 @@
 # install.sh: render the unit templates from site/site.env and install them (plan 23 W6).
 #
 #   sudo ops/systemd/install.sh            the three server units -> /etc/systemd/system
-#        ops/systemd/install.sh --user     the six service units  -> ~/.config/systemd/user
+#        ops/systemd/install.sh --user     the service units  -> ~/.config/systemd/user
 #        ops/systemd/install.sh [--user] --dry-run    render to stdout, install nothing
 #
 # The units are *.service.in with @WOW_USER@, @SERVER_PREFIX@, @REPO@ and @SITE_DIR@ in them, so a
@@ -56,7 +56,7 @@ if [ "$USER_MODE" = "1" ]; then
   SRC="$REPO/ops/user-units"
   DEST="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
   UNITS=(wow-regard.service wow-chronicler.service wow-market.service wow-lore-gate.service
-         wow-memory-archive.service wow-backup.service)
+         wow-memory-archive.service wow-backup.service wow-accounting.service)
   EXTRA=(wow-backup.timer)
 else
   # A dry run reads templates and writes nothing, so it has no business demanding root: the whole point

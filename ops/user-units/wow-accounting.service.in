@@ -1,0 +1,12 @@
+[Unit]
+Description=Export model request accounting for Living Azeroth
+
+[Service]
+WorkingDirectory=@REPO@/services
+Environment=SITE_DIR=@SITE_DIR@
+ExecStart=/usr/bin/python3 -m accounting.export --interval 30
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

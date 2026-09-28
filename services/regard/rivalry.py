@@ -222,7 +222,16 @@ def propose(lane, attempt, e, judge, g, asks):
     prompt = SEAT_PROMPT.format(setting=e["setting"], faction=g["faction"], name=g["name"], charter=g["charter"],
                                 history=g["history"], asks="\n".join(lines), shape=", ".join(shape))
     raw = extract_json(lane.chat([{"role": "user", "content": prompt}], 250 + 150 * sum(n for *_, n in asks),
-                                 temperature=0.8))
+                                 temperature=0.8,
+                                     context={
+                                         "purpose": "guild_seats",
+                                         "source": "regard/rivalry.py",
+                                         "stage": "propose",
+                                         "route": "batch",
+                                         "guild": g.get("name"),
+                                         "guild_id": g.get("guildid"),
+                                         "attempt": attempt,
+                                     }))
     picks, texts = {}, []
     for band, lands, n in asks:
         chosen = []
@@ -346,7 +355,13 @@ def relation_prompt(e, ga, gb, disposition, zones):
 
 def build_relation(lane, attempt, e, judge, ga, gb, disposition, zones):
     raw = extract_json(lane.chat([{"role": "user", "content": relation_prompt(e, ga, gb, disposition, zones)}],
-                                 700, temperature=0.85))
+                                 700, temperature=0.85,
+                                     context={
+                                         "purpose": "guild_relations",
+                                         "source": "regard/rivalry.py",
+                                         "stage": "build_relation",
+                                         "route": "batch",
+                                     }))
     origin, a_says, b_says = clean(raw.get("origin")), clean(raw.get("a_says")), clean(raw.get("b_says"))
     moments = [clean(m) for m in raw.get("moments") or [] if isinstance(m, str) and clean(m)]
     if not 30 <= len(origin.split()) <= 110:
@@ -513,7 +528,16 @@ def build_ranks(lane, attempt, e, judge, g, taken):
     # companies hold are named in the prompt: a rejection afterwards alone never broke the models of their favourites.
     prompt = RANKS_PROMPT.format(setting=e["setting"], name=g["name"], faction=g["faction"], charter=g["charter"],
                                  history=g["history"], taken=", ".join(sorted(taken)) or "none yet")
-    raw = extract_json(lane.chat([{"role": "user", "content": prompt}], 200, temperature=0.8))
+    raw = extract_json(lane.chat([{"role": "user", "content": prompt}], 200, temperature=0.8,
+        context={
+            "purpose": "guild_ranks",
+            "source": "regard/rivalry.py",
+            "stage": "build_ranks",
+            "route": "batch",
+            "guild": g.get("name"),
+            "guild_id": g.get("guildid"),
+            "attempt": attempt,
+        }))
     titles = [clean(t) for t in raw.get("ranks") or [] if isinstance(t, str)]
     if len(titles) != 5 or len({t.lower() for t in titles}) != 5:
         raise ValueError(f"want five different titles: {titles}")

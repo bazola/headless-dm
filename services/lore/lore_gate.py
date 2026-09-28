@@ -229,7 +229,13 @@ def shape(char, what, text, era_name, keep):
                 temper = g.temperaments()[0]
                 prompt = g.char_prompt(c, temper, None, e, bond=bond[0][0], main_name=main["name"],
                                        concept=text, main_sheet=main["sheet"], keep=keep)
-                prose = g.check_backstory(lane.chat([{"role": "user", "content": prompt}], 600),
+                prose = g.check_backstory(lane.chat([{"role": "user", "content": prompt}], 600,
+                    context={
+                        "purpose": "player_lore",
+                        "source": "lore/lore_gate.py",
+                        "stage": "shape",
+                        "route": "batch",
+                    }),
                                           g.ALT_STORY_WORDS)
             g.vet(prose, e, judge, attempt, f"gate {char['guid']} {char['name']}")
             break
@@ -552,7 +558,13 @@ def write_alt(job, char, kind, temperament, concept, keep, keep_story):
         try:
             prompt = g.char_prompt(c, temper, None, e, bond=job["bond"], main_name=m["name"],
                                    concept=concept, main_sheet=m["sheet"], keep=keep_story)
-            story = g.check_backstory(lane.chat([{"role": "user", "content": prompt}], 600),
+            story = g.check_backstory(lane.chat([{"role": "user", "content": prompt}], 600,
+                context={
+                    "purpose": "player_lore",
+                    "source": "lore/lore_gate.py",
+                    "stage": "write_alt",
+                    "route": "batch",
+                }),
                                       g.ALT_STORY_WORDS)
             g.vet(story, e, judge, attempt, f"gate story {c['guid']} {c['name']}")
             job["story"] = story

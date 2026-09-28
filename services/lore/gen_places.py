@@ -270,7 +270,13 @@ def build(lane, e, zone, creatures, angle):
     prompt = PROMPT.format(setting=e["setting"], limits=e["limits"], zone=zone,
                            creatures=", ".join(deal(kinds(creatures), angle)) or "little worth naming",
                            angle=ANGLES[angle])
-    text = lane.chat([{"role": "user", "content": prompt}], 200, temperature=0.85)
+    text = lane.chat([{"role": "user", "content": prompt}], 200, temperature=0.85,
+        context={
+            "purpose": "place_lore",
+            "source": "lore/gen_places.py",
+            "stage": "build",
+            "route": "batch",
+        })
     return clean(text)
 
 
@@ -426,7 +432,13 @@ def draft(args):
                 text = clean(lane.chat([{"role": "user", "content": SEEDLESS.format(
                     setting=e["setting"], limits=e["limits"], zone=zone, angle=ANGLES[angle],
                     districts=", ".join(real) or zone)}],
-                    200, temperature=0.85))
+                    200, temperature=0.85,
+                        context={
+                            "purpose": "place_lore",
+                            "source": "lore/gen_places.py",
+                            "stage": "draft",
+                            "route": "batch",
+                        }))
                 bad = problems(text, e, zone, [], angle, judge)
                 if real and not any(re.search(rf"\b{re.escape(d)}\b", text, re.I) for d in real):
                     bad.append("names none of the real districts")
