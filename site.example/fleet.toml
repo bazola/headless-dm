@@ -61,6 +61,15 @@ kinds = ["guild", "character", "rag", "traits"]
 # batch_slots = 0
 # timeout = 60
 
+# --- aliases ----------------------------------------------------------------
+# Some services name a lane outright ("evo-quality,z13-qwen35" -- the machines this project was built
+# on). An alias sends that name to one of YOUR backends instead, so a rented-only realm needs no code
+# change. What each call cost is recorded by request accounting when it is switched on
+# (ACCOUNTING_ENABLED in site.env; docs/accounting.md).
+# [aliases]
+# evo-quality = "remote"
+# z13-qwen35  = "remote"
+
 # --- live chat routes -------------------------------------------------------
 # Order is failover order. The first backend with a free slot answers.
 #

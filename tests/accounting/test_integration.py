@@ -88,7 +88,8 @@ class IntegrationTests(unittest.TestCase):
 
     def backend(self, model):
         return dict(
-            url=self.url + "/v1/chat/completions", model=model, timeout=5, sem=None
+            # fleet_config gives every backend its fleet.toml name; the router logs by it.
+            name=model, url=self.url + "/v1/chat/completions", model=model, timeout=5, sem=None
         )
 
     def test_batch_recording_and_export_work_without_the_local_proxy(self):

@@ -63,10 +63,21 @@ def load(strict=False):
     return data
 
 
+def resolve(name, cfg=None):
+    """A backend name after [aliases]. An alias lets a realm swap a machine out without touching the
+    code that names it: services still ask for "evo-quality" by name, and a fleet.toml that has moved
+    that work to a rented model says `evo-quality = "remote-qwen80"`. One hop only, so a cycle cannot
+    loop."""
+    cfg = cfg or load()
+    return (cfg.get("aliases") or {}).get(name, name)
+
+
 def backend(name, cfg=None):
     """One backend's settings, with the defaults filled in. Unknown name is fatal: a typo in a route
-    should say so here rather than become a silent hole in the failover list."""
+    should say so here rather than become a silent hole in the failover list. An alias resolves first,
+    and the result carries the REAL name, so logs and request accounting say what actually answered."""
     cfg = cfg or load()
+    name = resolve(name, cfg)
     got = (cfg.get("backends") or {}).get(name)
     if got is None:
         known = ", ".join(sorted((cfg.get("backends") or {})))
@@ -80,11 +91,14 @@ def backend(name, cfg=None):
     out.setdefault("kinds", [])
     out.setdefault("lmstudio", False)
     out.setdefault("system_suffix", None)
+    out.setdefault("extra_body", {})
     out["name"] = name
     # A paid backend without its key is not an error: it drops out of every route it appears in, which
     # is what "optional fallback" has to mean for a realm that never bought one.
     key_env = out.get("api_key_env")
-    out["api_key"] = os.environ.get(key_env, "") if key_env else ""
+    # Through site.get, not os.environ: no service unit exports secrets.env, so an environ-only lookup
+    # read every key as unset and silently dropped the backend from its routes.
+    out["api_key"] = site.get(key_env, "") if key_env else ""
     out["usable"] = bool(out["api_key"]) if key_env else True
     return out
 
@@ -94,8 +108,14 @@ def routes(cfg=None):
     cfg = cfg or load()
     out = {}
     for name, names in (cfg.get("routes") or {}).items():
-        chain = [backend(n, cfg) for n in names]
-        out[name] = [b for b in chain if b["usable"]]
+        chain, seen = [], set()
+        for n in names:
+            b = backend(n, cfg)
+            # Two aliases of one backend in a route would be the same server tried twice on failover.
+            if b["usable"] and b["name"] not in seen:
+                seen.add(b["name"])
+                chain.append(b)
+        out[name] = chain
     return out
 
 
@@ -103,7 +123,12 @@ def batch_lanes(cfg=None):
     """The backends batch lore may use, in preference order, minus any with no batch slots."""
     cfg = cfg or load()
     names = (cfg.get("batch") or {}).get("lanes") or list(cfg.get("backends") or {})
-    return [b for b in (backend(n, cfg) for n in names) if b["usable"] and b["batch_slots"] > 0]
+    out, seen = [], set()
+    for b in (backend(n, cfg) for n in names):
+        if b["usable"] and b["batch_slots"] > 0 and b["name"] not in seen:
+            seen.add(b["name"])
+            out.append(b)
+    return out
 
 
 def judge(cfg=None):

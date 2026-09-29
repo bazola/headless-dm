@@ -40,11 +40,16 @@ THINK_RE = re.compile(r"<think>.*?</think>\s*", re.S)
 
 
 class Lane:
-    def __init__(self, name, url, model, slots, kinds, timeout=300, system_suffix=None, lmstudio=False):
+    def __init__(self, name, url, model, slots, kinds, timeout=300, system_suffix=None, lmstudio=False,
+                 api_key="", extra_body=None):
         self.name, self.url, self.model = name, url, model
         self.slots, self.kinds, self.timeout = slots, set(kinds), timeout
         self.system_suffix = system_suffix
         self.lmstudio = lmstudio   # LM Studio takes response_format json_schema or text, never json_object (HTTP 400)
+        # A paid backend (OpenRouter): its key, and request fields such as reasoning off and usage
+        # accounting. Without the key the lane used to send an unauthenticated request and 401 forever.
+        self.api_key, self.extra_body = api_key, dict(extra_body or {})
+        self.cost = 0.0
         self.lock = threading.Lock()
         self.fail_streak = 0
         self.down_until = 0.0
@@ -59,11 +64,18 @@ class Lane:
             messages = [{"role": "system", "content": self.system_suffix}] + list(messages)
         body = {"model": self.model, "messages": messages, "max_tokens": max_tokens,
                 "temperature": temperature, "stream": False}
+        body.update(self.extra_body)
         if json_mode:
             body["response_format"] = ({"type": "json_schema", "json_schema": {"name": "reply", "schema": {"type": "object"}}}
                                        if self.lmstudio else {"type": "json_object"})
-        req = urllib.request.Request(self.url + "/v1/chat/completions", json.dumps(body).encode(),
-                                     {"Content-Type": "application/json"})
+        # fleet.toml holds a base url. A local server's base is the host; OpenRouter's already ends in
+        # /v1, and appending another made every paid batch call a 404.
+        base = self.url.rstrip("/")
+        url = base + ("/chat/completions" if base.endswith("/v1") else "/v1/chat/completions")
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        req = urllib.request.Request(url, json.dumps(body).encode(), headers)
         t0 = time.time()
         try:
             with record_attempt(self.model, context or {"purpose": "batch_generation", "source": "fleet", "route": "batch"}) as attempt:
@@ -78,18 +90,27 @@ class Lane:
                     self.down_until = time.time() + 60
                     self.fail_streak = 0
             raise RuntimeError(f"{self.name} backend: {e}") from None
+        usage = out.get("usage") or {}
         with self.lock:
             self.fail_streak = 0
-            self.tokens += (out.get("usage") or {}).get("completion_tokens") or 0
+            self.tokens += usage.get("completion_tokens") or 0
+            self.cost += usage.get("cost") or 0.0
             self.seconds += time.time() - t0
         return text
+
+    @classmethod
+    def of(cls, b, slots, kinds=(), timeout=None):
+        """A Lane for one fleet_config backend dict. The judge callers used to pass url/model/lmstudio
+        by hand, and so silently dropped the key the day the judge moved to a paid backend."""
+        return cls(b["name"], b["url"], b["model"], slots, kinds,
+                   timeout=timeout or b["batch_timeout"], system_suffix=b["system_suffix"],
+                   lmstudio=b["lmstudio"], api_key=b["api_key"], extra_body=b["extra_body"])
 
 
 def _from_config(b):
     """One backend entry from site/fleet.toml as a Lane. Batch caps and batch timeouts, not the
     router's: a backstory is not a chat message, and the two want very different numbers."""
-    return Lane(b["name"], b["url"], b["model"], b["batch_slots"], b["kinds"],
-                timeout=b["batch_timeout"], system_suffix=b["system_suffix"], lmstudio=b["lmstudio"])
+    return Lane.of(b, b["batch_slots"], b["kinds"])
 
 
 def all_lanes():
@@ -115,7 +136,10 @@ DEFAULT_LANES = ""   # kept for callers that still pass it; empty means "whateve
 def pick_lanes(names=None, slots=None):
     """names: 'a,b'; slots: 'lane=n,lane=n' overrides (0 drops the lane)."""
     lanes = all_lanes()
+    # Through fleet.toml's [aliases]: code that names a machine ("evo-quality") gets whatever the realm
+    # has put in its place. Two aliases of one backend become one lane, not the same server twice.
     wanted = [n.strip() for n in (names or "").split(",") if n.strip()] or default_lane_names()
+    wanted = list(dict.fromkeys(_fleet.resolve(n) for n in wanted))
     missing = [n for n in wanted if n not in lanes]
     if missing:
         raise SystemExit(f"fleet.toml has no batch lane named {', '.join(missing)}; "
@@ -124,7 +148,7 @@ def pick_lanes(names=None, slots=None):
     for item in filter(None, (slots or "").split(",")):
         name, n = item.split("=")
         for lane in chosen:
-            if lane.name == name.strip():
+            if lane.name == _fleet.resolve(name.strip()):
                 lane.slots = int(n)
     return [lane for lane in chosen if lane.slots > 0]
 
@@ -145,7 +169,7 @@ def prefer_lanes(names=None, slots=None):
     prefers, saying so once. On a realm that HAS the named lanes this is exactly pick_lanes.
     """
     lanes = all_lanes()
-    wanted = [n.strip() for n in (names or "").split(",") if n.strip()]
+    wanted = [_fleet.resolve(n.strip()) for n in (names or "").split(",") if n.strip()]
     missing = [n for n in wanted if n not in lanes]
     if missing:
         key = ",".join(sorted(missing))
@@ -169,8 +193,7 @@ class Judge:
         # Resolve slots ONCE, here: the semaphore below takes the same number, and passing None down
         # to BoundedSemaphore is a TypeError rather than a default.
         slots = int(slots or j["slots"])
-        self.lane = Lane(j["name"], j["url"], j["model"], slots, set(),
-                         timeout=j["router_timeout"], lmstudio=j["lmstudio"])
+        self.lane = Lane.of(j, slots, timeout=j["router_timeout"])
         self.sem = threading.BoundedSemaphore(slots)
         self.warned = False
 
@@ -275,5 +298,6 @@ class Pool:
         self.log(f"pool finished in {time.time() - t0:.0f}s")
         for lane in self.lanes:
             rate = f"{lane.tokens / lane.seconds:.1f} tok/s per request" if lane.seconds and lane.tokens else "-"
-            self.log(f"  {lane.name:12} slots {lane.slots}  ok {lane.done:4}  failed {lane.failed:3}  {rate}")
+            paid = f"  ${lane.cost:.4f}" if lane.api_key else ""
+            self.log(f"  {lane.name:12} slots {lane.slots}  ok {lane.done:4}  failed {lane.failed:3}  {rate}{paid}")
         return self.failures

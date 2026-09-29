@@ -65,12 +65,14 @@ def _backend(name):
         url = url + ("/chat/completions" if url.endswith("/v1") else "/v1/chat/completions")
     slots = int(b["router_slots"] or 0)
     _BUILT[name] = {
+        "name": name,
         "url": url,
         "model": b["model"],
         "key": b["api_key"],
         "timeout": int(b["router_timeout"]),
         "sem": threading.BoundedSemaphore(slots) if slots else None,
         "system_suffix": b["system_suffix"],
+        "extra_body": b["extra_body"],
     }
     return _BUILT[name]
 
@@ -108,6 +110,9 @@ def call_backend(backend, messages, opts, context=None):
         "messages": messages,
         "stream": False,
     }
+    # Provider-specific request fields from fleet.toml, e.g. OpenRouter's {"reasoning": {"enabled": false}}
+    # to keep a thinking model from spending the reply budget on thoughts nobody reads.
+    body.update(backend.get("extra_body") or {})
     # Diversity controls are forwarded too: mod-ollama-chat only emits these when the
     # operator moves them off the module's hardcoded sentinels, so anything that arrives
     # here was asked for deliberately. presence/frequency are OpenAI-standard; repeat_penalty,
@@ -136,14 +141,15 @@ def call_backend(backend, messages, opts, context=None):
             out = json.loads(resp.read().decode())
         attempt.result = out
         content = out["choices"][0]["message"]["content"] or ""
-        return THINK_RE.sub("", content).strip()
+        return THINK_RE.sub("", content).strip(), out.get("usage") or {}
 
 def route_call(route_name, messages, opts):
     backends = ROUTES.get(route_name) or ROUTES[DEFAULT_ROUTE]
     errors = []
     parent_id = uuid4().hex
     for number, b in enumerate(backends, 1):
-        name = b['url'].split('/v1')[0]
+        # By fleet.toml name, not url: several rented models share one OpenRouter url.
+        name = b["name"]
         sem = b.get("sem")
         t0 = time.time()
         if sem and not sem.acquire(timeout=QUEUE_WAIT):
@@ -157,9 +163,12 @@ def route_call(route_name, messages, opts):
             context.setdefault("purpose", "chat_generation")
             context.setdefault("source", "router")
             context.update(route=route_name, parent_id=parent_id, attempt=number)
-            text = call_backend(b, messages, opts, context)
+            text, usage = call_backend(b, messages, opts, context)
+            cost = usage.get("cost")
             log(f"route={route_name} backend={name} "
-                f"ok {int((time.time()-t0)*1000)}ms (queued {waited}ms) {len(text)}ch")
+                f"ok {int((time.time()-t0)*1000)}ms (queued {waited}ms) {len(text)}ch"
+                + (f" {usage.get('prompt_tokens', 0)}+{usage.get('completion_tokens', 0)}tok ${cost:.5f}"
+                   if cost is not None else ""))
             return text
         except Exception as e:  # noqa: BLE001 — any backend failure → next
             log(f"route={route_name} backend={name} "
@@ -273,7 +282,7 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     log(f"router up on {BIND[0]}:{BIND[1]} routes={list(ROUTES)} "
-        f"openrouter={'on' if os.environ.get('OPENROUTER_API_KEY') else 'off'}")
+        f"paid={sorted({b['model'] for c in ROUTES.values() for b in c if b['key']}) or 'none'}")
     ThreadingHTTPServer(BIND, Handler).serve_forever()
 
 if __name__ == "__main__":

@@ -156,8 +156,7 @@ def lore(args):
     log(f"lore: {len(jobs)} named relations to judge")
     # The judge's address lives in site/fleet.toml, not in three files that could disagree (23 W3).
     _j = fleet._fleet.judge()
-    judge = fleet.Lane(_j["name"], _j["url"], _j["model"], LORE_SLOTS, set(), timeout=90,
-                       lmstudio=_j["lmstudio"])
+    judge = fleet.Lane.of(_j, LORE_SLOTS, timeout=90)
     baselines = {(int(r[0]), int(r[1])): float(r[2]) for r in sql("SELECT bot_guid, other_guid, baseline FROM regard")}
 
     def ask(job):

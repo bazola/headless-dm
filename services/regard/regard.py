@@ -2996,8 +2996,7 @@ def main():
     meta = eras.get(args.era)["meta"]
     # The judge's address lives in site/fleet.toml, not in three files that could disagree (23 W3).
     _j = fleet._fleet.judge()
-    judge = fleet.Lane(_j["name"], _j["url"], _j["model"], JUDGE_SLOTS, set(), timeout=90,
-                       lmstudio=_j["lmstudio"])
+    judge = fleet.Lane.of(_j, JUDGE_SLOTS, timeout=90)
     while True:
         t0 = time.time()
         try:
