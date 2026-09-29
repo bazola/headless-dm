@@ -568,7 +568,13 @@ def write_prose(prompt, title, e, known, lanes, judge, min_words):
     for attempt in range(1, MAX_ATTEMPTS + 1):
         lane = attempt_on(lanes, attempt)
         try:
-            body = clean_entry(lane.chat(messages, 700, temperature=0.85), title)
+            body = clean_entry(lane.chat(messages, 700, temperature=0.85,
+                context={
+                    "purpose": "chronicle_write",
+                    "source": "chronicler/chronicler.py",
+                    "stage": "write_prose",
+                    "route": "batch",
+                }), title)
             check_words(body, e)
             if len(body.split()) < min_words:
                 raise ValueError("too short")
@@ -616,7 +622,13 @@ def write_rumours(scribe, e, start, reports, known, lanes, judge):
     for attempt in range(1, MAX_ATTEMPTS + 1):
         lane = attempt_on(lanes, attempt)
         try:
-            items = json_reply(lane.chat(messages, 900, temperature=0.6, json_mode=True)).get("rumours", [])
+            items = json_reply(lane.chat(messages, 900, temperature=0.6, json_mode=True,
+                context={
+                    "purpose": "rumour_write",
+                    "source": "chronicler/chronicler.py",
+                    "stage": "write_rumours",
+                    "route": "batch",
+                })).get("rumours", [])
             kept, used = [], set()
             for it in items:
                 try:
@@ -718,7 +730,13 @@ def retell(scribe, e, jobs, lanes, judge):
     for attempt in range(1, MAX_ATTEMPTS + 1):
         lane = attempt_on(lanes, attempt)
         try:
-            items = json_reply(lane.chat(messages, 900, temperature=0.7, json_mode=True)).get("tales", [])
+            items = json_reply(lane.chat(messages, 900, temperature=0.7, json_mode=True,
+                context={
+                    "purpose": "rumour_spread",
+                    "source": "chronicler/chronicler.py",
+                    "stage": "retell",
+                    "route": "batch",
+                })).get("tales", [])
             kept = {}
             for it in items:
                 try:

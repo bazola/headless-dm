@@ -165,7 +165,13 @@ def lore(args):
         prompt = LORE_PROMPT.format(writer=wname, named=nname, lines=lines)
         for _ in range(3):
             try:
-                out = judge.chat([{"role": "user", "content": prompt}], 200, temperature=0.2, json_mode=True)
+                out = judge.chat([{"role": "user", "content": prompt}], 200, temperature=0.2, json_mode=True,
+                    context={
+                        "purpose": "society_relationships",
+                        "source": "regard/society.py",
+                        "stage": "lore.ask",
+                        "route": "judge",
+                    })
                 m = re.search(r"\{.*\}", out, re.S)
                 data = json.loads(m.group(0)) if m else {}
                 feels = max(-40, min(40, int(data.get("feels"))))

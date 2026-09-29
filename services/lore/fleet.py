@@ -33,6 +33,7 @@ import urllib.request
 # does not follow one -- it would look for `common` under /opt/wow, where there is none (plan 23 W1).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from common import fleet_config as _fleet  # noqa: E402
+from accounting.recorder import record_attempt  # noqa: E402
 
 MAX_ATTEMPTS = 4
 THINK_RE = re.compile(r"<think>.*?</think>\s*", re.S)
@@ -53,7 +54,7 @@ class Lane:
     def available(self):
         return time.time() >= self.down_until
 
-    def chat(self, messages, max_tokens, temperature=0.8, json_mode=False):
+    def chat(self, messages, max_tokens, temperature=0.8, json_mode=False, context=None):
         if self.system_suffix:
             messages = [{"role": "system", "content": self.system_suffix}] + list(messages)
         body = {"model": self.model, "messages": messages, "max_tokens": max_tokens,
@@ -65,8 +66,11 @@ class Lane:
                                      {"Content-Type": "application/json"})
         t0 = time.time()
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as r:
-                out = json.load(r)
+            with record_attempt(self.model, context or {"purpose": "batch_generation", "source": "fleet", "route": "batch"}) as attempt:
+                with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                    out = json.load(r)
+                attempt.result = out
+                text = THINK_RE.sub("", out["choices"][0]["message"].get("content") or "").strip()
         except (urllib.error.URLError, OSError) as e:  # includes timeouts and HTTP errors
             with self.lock:
                 self.fail_streak += 1
@@ -74,7 +78,6 @@ class Lane:
                     self.down_until = time.time() + 60
                     self.fail_streak = 0
             raise RuntimeError(f"{self.name} backend: {e}") from None
-        text = THINK_RE.sub("", out["choices"][0]["message"].get("content") or "").strip()
         with self.lock:
             self.fail_streak = 0
             self.tokens += (out.get("usage") or {}).get("completion_tokens") or 0
@@ -171,13 +174,14 @@ class Judge:
         self.sem = threading.BoundedSemaphore(slots)
         self.warned = False
 
-    def check(self, prompt):
+    def check(self, prompt, context=None):
         """Evidence string when the text is flagged, else None."""
         if not self.lane.available():
             return None
         with self.sem:
             try:
-                out = self.lane.chat([{"role": "user", "content": prompt}], 150, temperature=0.0, json_mode=True)
+                out = self.lane.chat([{"role": "user", "content": prompt}], 150, temperature=0.0, json_mode=True,
+                                     context=context or {"purpose": "lore_validation", "source": "fleet", "stage": "judge.check", "route": "judge"})
             except Exception as e:
                 if not self.warned:
                     print(f"judge unavailable ({e}); outputs pass on the regex alone", flush=True)

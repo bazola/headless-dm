@@ -331,7 +331,16 @@ def gen_guild(lane, attempt, e, judge, guildid, name):
                                  others=(f"\n...and {others} more sworn members, not named here."
                                          if others else ""),
                                  ranks=", ".join(ranks), guild_now=e["guild_now"])
-    data = extract_json(lane.chat([{"role": "user", "content": prompt}], 1400, temperature=0.85))
+    data = extract_json(lane.chat([{"role": "user", "content": prompt}], 1400, temperature=0.85,
+        context={
+            "purpose": "lore_guild",
+            "source": "lore/gen_backstories.py",
+            "stage": "gen_guild",
+            "route": "batch",
+            "guild": name,
+            "guild_id": guildid,
+            "attempt": attempt,
+        }))
     history, charter, motto = data["history"].strip(), data["charter"].strip(), data["motto"].strip()
     names = {m["name"] for m in named}
     roles = {k: v for k, v in data.get("member_roles", {}).items() if isinstance(v, str) and k in names}
@@ -345,7 +354,15 @@ def gen_guild(lane, attempt, e, judge, guildid, name):
 
 
 def gen_character(lane, attempt, e, judge, c, temper, guild):
-    text = check_backstory(lane.chat([{"role": "user", "content": char_prompt(c, temper, guild, e)}], 500))
+    text = check_backstory(lane.chat([{"role": "user", "content": char_prompt(c, temper, guild, e)}], 500,
+        context={
+            "purpose": "lore_backstory",
+            "source": "lore/gen_backstories.py",
+            "stage": "gen_character",
+            "route": "batch",
+            "bot": c.get("name"),
+            "bot_guid": c.get("guid"),
+        }))
     vet(text, e, judge, attempt, f"character {c['guid']} {c['name']}")
     gid = str(guild["guildid"]) if guild else "NULL"
     sql("INSERT INTO lore_character (guid, guildid, temperament, backstory, model, era) VALUES "
@@ -426,7 +443,13 @@ def name_pools(args):
                                                  style=" " + NAME_STYLE[culture] if culture in NAME_STYLE else "",
                                                  avoid=", ".join(OVERUSED_NAMES))
                 try:
-                    listed = extract_json(lane.chat([{"role": "user", "content": prompt}], 1200, temperature=1.0))["names"]
+                    listed = extract_json(lane.chat([{"role": "user", "content": prompt}], 1200, temperature=1.0,
+                        context={
+                            "purpose": "name_generation",
+                            "source": "lore/gen_backstories.py",
+                            "stage": "name_pools",
+                            "route": "batch",
+                        }))["names"]
                 except (ValueError, KeyError, RuntimeError) as ex:
                     log(f"  retry {culture} {gender}: {ex}")
                     continue
@@ -680,7 +703,15 @@ def build_traits(lane, c, e, judge, rng):
         faction="Horde" if c["race"] in HORDE else "Alliance", standing=eras.standing(c["level"], e),
         guild_line=guild_line, temperament=c["temperament"], backstory=c["backstory"],
         kinds=", ".join(kinds), targets=", ".join(t for t, _, _ in e["targets"]), overused=", ".join(OVERUSED_NAMES))
-    raw = extract_json(lane.chat([{"role": "user", "content": prompt}], 900, temperature=0.85))
+    raw = extract_json(lane.chat([{"role": "user", "content": prompt}], 900, temperature=0.85,
+        context={
+            "purpose": "lore_traits",
+            "source": "lore/gen_backstories.py",
+            "stage": "build_traits",
+            "route": "batch",
+            "bot": c.get("name"),
+            "bot_guid": c.get("guid"),
+        }))
     # Fold punctuation first: q() would otherwise lengthen the text after the column-size cut.
     data = {k: re.sub(r"\s+", " ", str(raw.get(k) or "").translate(ASCII_PUNCT)).strip().strip('"')
             for k in ("personality", "gist", "motivation", "motivation_short", "motivation_kind")}
@@ -853,7 +884,15 @@ def reconcile(args):
                                              faction="Horde" if c["race"] in HORDE else "Alliance",
                                              temperament=tempers.get(c["temperament"], ""),
                                              personality=c["personality"])
-            text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": prompt}], 200, temperature=0.9)
+            text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": prompt}], 200, temperature=0.9,
+                context={
+                    "purpose": "lore_repair",
+                    "source": "lore/gen_backstories.py",
+                    "stage": "reconcile.job.run",
+                    "route": "batch",
+                    "bot": c.get("name"),
+                    "bot_guid": c.get("guid"),
+                })
                           .translate(ASCII_PUNCT)).strip().strip('"')
             words = _words(text)
             if not 8 <= words <= 55:
@@ -943,7 +982,15 @@ def soften(args):
                                           faction="Horde" if c["race"] in HORDE else "Alliance",
                                           temperament=tempers.get(c["temperament"], ""),
                                           personality=c["personality"])
-            text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": prompt}], 200, temperature=0.9)
+            text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": prompt}], 200, temperature=0.9,
+                context={
+                    "purpose": "lore_repair",
+                    "source": "lore/gen_backstories.py",
+                    "stage": "soften.job.run",
+                    "route": "batch",
+                    "bot": c.get("name"),
+                    "bot_guid": c.get("guid"),
+                })
                           .translate(ASCII_PUNCT)).strip().strip('"')
             words = _words(text)
             if not 8 <= words <= 55:
@@ -999,7 +1046,15 @@ def vary_personality(args):
                                         cls=CLASSES.get(c["cls"], "wanderer"),
                                         faction="Horde" if c["race"] in HORDE else "Alliance",
                                         personality=c["personality"], gist=c["gist"], avoid=avoid_text)
-            text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": prompt}], 160, temperature=0.9)
+            text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": prompt}], 160, temperature=0.9,
+                context={
+                    "purpose": "lore_traits",
+                    "source": "lore/gen_backstories.py",
+                    "stage": "vary_personality.job.run",
+                    "route": "batch",
+                    "bot": c.get("name"),
+                    "bot_guid": c.get("guid"),
+                })
                           .translate(ASCII_PUNCT)).strip().strip('"')
             n = _words(text)
             if not 8 <= n <= 50:
@@ -1147,7 +1202,15 @@ def vary_traits(args):
                            faction="Horde" if c["race"] in HORDE else "Alliance",
                            avoid=avoid_text, **{k: c[k] for k in (field,) + spec["extra"]})
                 text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": spec["prompt"].format(**fmt)}],
-                                                     240, temperature=0.9).translate(ASCII_PUNCT)).strip().strip('"')
+                                                     240, temperature=0.9,
+                                                         context={
+                                                             "purpose": "lore_traits",
+                                                             "source": "lore/gen_backstories.py",
+                                                             "stage": "vary_traits.job.run",
+                                                             "route": "batch",
+                                                             "bot": c.get("name"),
+                                                             "bot_guid": c.get("guid"),
+                                                         }).translate(ASCII_PUNCT)).strip().strip('"')
                 n = _words(text)
                 if not spec["low"] <= n <= spec["high"]:
                     raise ValueError(f"{n} words")
@@ -1506,7 +1569,15 @@ def build_life(lane, c, e, judge):
         homelands=HOMELANDS.get(c["race"], "wherever their people settled"),
         kin_framing=KIN_FRAMING.get(c["race"], ""), dead_block=dead_block,
         overused=", ".join(OVERUSED_NAMES))
-    raw = extract_json(lane.chat([{"role": "user", "content": prompt}], 700, temperature=0.85))
+    raw = extract_json(lane.chat([{"role": "user", "content": prompt}], 700, temperature=0.85,
+        context={
+            "purpose": "lore_life",
+            "source": "lore/gen_backstories.py",
+            "stage": "build_life",
+            "route": "batch",
+            "bot": c.get("name"),
+            "bot_guid": c.get("guid"),
+        }))
     data = {k: re.sub(r"\s+", " ", str(raw.get(k) or "").translate(ASCII_PUNCT)).strip().strip('"')
             for k, _, _ in LIFE_WORDS}
 
@@ -1717,7 +1788,15 @@ def sample(args):
         t0 = time.time()
         try:
             text = check_backstory(lane.chat([{"role": "user",
-                                               "content": char_prompt(c, random.choice(tempers), None, e)}], 500))
+                                               "content": char_prompt(c, random.choice(tempers), None, e)}], 500,
+                                                   context={
+                                                       "purpose": "lore_backstory",
+                                                       "source": "lore/gen_backstories.py",
+                                                       "stage": "sample.one",
+                                                       "route": "batch",
+                                                       "bot": c.get("name"),
+                                                       "bot_guid": c.get("guid"),
+                                                   }))
         except Exception as ex:
             return f"== {lane.name}: {c['name']} FAILED {ex}"
         dt = time.time() - t0
@@ -1821,7 +1900,15 @@ def build_restand(lane, c, e, keep):
         race=RACES.get(c["race"], "unknown"), cls=CLASSES.get(c["cls"], "wanderer"),
         faction="Horde" if c["race"] in HORDE else "Alliance", standing=eras.standing(c["level"], e),
         evidence=c["evidence"], texts=json.dumps({f: c[f] for f in RESTAND_FIELDS}, indent=1, ensure_ascii=False))
-    raw = extract_json(lane.chat([{"role": "user", "content": prompt}], 1200, temperature=0.6))
+    raw = extract_json(lane.chat([{"role": "user", "content": prompt}], 1200, temperature=0.6,
+        context={
+            "purpose": "lore_restand",
+            "source": "lore/gen_backstories.py",
+            "stage": "build_restand",
+            "route": "batch",
+            "bot": c.get("name"),
+            "bot_guid": c.get("guid"),
+        }))
     data = {f: re.sub(r"\s+", " ", str(raw.get(f) or "").translate(ASCII_PUNCT)).strip().strip('"') for f in RESTAND_FIELDS}
     problems = []
     try:
@@ -2126,14 +2213,30 @@ def build_bond(lane, c, m, kind, concept, others, e, keep=()):
         cls=CLASSES.get(c["cls"], "adventurer"), standing=eras.standing(c["level"], e),
         gloss=BOND_KINDS[kind]["gloss"], concept_block=concept_block, others_block=others_block,
         lo=BOND_TARGET[0], hi=BOND_TARGET[1])
-    raw = lane.chat([{"role": "user", "content": prompt}], 400, temperature=0.7)
+    raw = lane.chat([{"role": "user", "content": prompt}], 400, temperature=0.7,
+        context={
+            "purpose": "player_bond",
+            "source": "lore/gen_backstories.py",
+            "stage": "build_bond",
+            "route": "batch",
+            "bot": c.get("name"),
+            "bot_guid": c.get("guid"),
+        })
     return check_bond(str(raw or "").translate(ASCII_PUNCT), m["name"], c["name"])
 
 
 def gen_alt_backstory(lane, attempt, e, judge, c, temper, bond, m, concept="", keep=()):
     text = check_backstory(lane.chat(
         [{"role": "user", "content": char_prompt(c, temper, None, e, bond=bond, main_name=m["name"],
-                                                 concept=concept, main_sheet=m["sheet"], keep=keep)}], 600),
+                                                 concept=concept, main_sheet=m["sheet"], keep=keep)}], 600,
+                                                     context={
+                                                         "purpose": "player_lore",
+                                                         "source": "lore/gen_backstories.py",
+                                                         "stage": "gen_alt_backstory",
+                                                         "route": "batch",
+                                                         "bot": c.get("name"),
+                                                         "bot_guid": c.get("guid"),
+                                                     }),
         ALT_STORY_WORDS)
     if m["name"].lower() not in text.lower():
         raise ValueError(f"does not name {m['name']}")
@@ -2314,7 +2417,15 @@ def alts(args):
                 if args.dry_run:
                     text = check_backstory(lane.chat([{"role": "user", "content": char_prompt(
                         c, temper, None, e, bond=bond, main_name=m["name"], concept=concept,
-                        main_sheet=m["sheet"], keep=keep_story)}], 600), ALT_STORY_WORDS)
+                        main_sheet=m["sheet"], keep=keep_story)}], 600,
+                            context={
+                                "purpose": "player_lore",
+                                "source": "lore/gen_backstories.py",
+                                "stage": "alts",
+                                "route": "batch",
+                                "bot": c.get("name"),
+                                "bot_guid": c.get("guid"),
+                            }), ALT_STORY_WORDS)
                 else:
                     text = gen_alt_backstory(lane, attempt, e, judge, c, temper, bond, m, concept, keep_story)
                 break
@@ -2414,7 +2525,15 @@ def build_main_sheet(lane, c, e, source):
         cls=CLASSES.get(c["cls"], "wanderer"), faction="Horde" if c["race"] in HORDE else "Alliance",
         standing=eras.standing(c["level"], e), source=source.strip(),
         lo=MAIN_SHEET_TARGET[0], hi=MAIN_SHEET_TARGET[1])
-    raw = lane.chat([{"role": "user", "content": prompt}], 700, temperature=0.6)
+    raw = lane.chat([{"role": "user", "content": prompt}], 700, temperature=0.6,
+        context={
+            "purpose": "player_lore",
+            "source": "lore/gen_backstories.py",
+            "stage": "build_main_sheet",
+            "route": "batch",
+            "bot": c.get("name"),
+            "bot_guid": c.get("guid"),
+        })
     return re.sub(r"\s+", " ", str(raw or "")).translate(ASCII_PUNCT).strip().strip('"')
 
 

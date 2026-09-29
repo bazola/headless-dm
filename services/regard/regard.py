@@ -1014,7 +1014,13 @@ def create_actions(actions, names, meta):
 
     def job(a):
         def run(lane, attempt):
-            text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": a["prompt"]}], 90, temperature=0.8))
+            text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": a["prompt"]}], 90, temperature=0.8,
+                context={
+                    "purpose": "guild_action",
+                    "source": "regard/regard.py",
+                    "stage": "create_actions.job.run",
+                    "route": "batch",
+                }))
             text = text.strip().strip('"').translate(ASCII_PUNCT)
             if not 3 <= len(text.split()) <= 35 or re.search(r"\d", text):
                 raise ValueError(f"unusable line: {text[:60]!r}")
@@ -1575,7 +1581,13 @@ def write_talk(a, b, pa, pb, feel, e, meta, names):
     by_name = {pa["name"].lower(): pa, pb["name"].lower(): pb}
 
     def run(lane, attempt):
-        out = lane.chat([{"role": "user", "content": prompt}], 600, temperature=0.9)
+        out = lane.chat([{"role": "user", "content": prompt}], 600, temperature=0.9,
+            context={
+                "purpose": "bot_conversation",
+                "source": "regard/regard.py",
+                "stage": "write_talk.run",
+                "route": "batch",
+            })
         m = re.search(r"\{.*\}", out, re.S)
         data = json.loads(m.group(0)) if m else {}
         lines = []
@@ -1608,7 +1620,13 @@ def judge_talk(changes, talk, pa, pb, judge, meta):
     text = "\n".join(f"{i}. {who['name']}: {line}" for i, (who, line) in enumerate(talk["lines"], 1))
     try:
         out = judge.chat([{"role": "user", "content": JUDGE_PROMPT.format(people=f"{pa['name']}, {pb['name']}", lines=text)}],
-                         900, temperature=0.1, json_mode=True)
+                         900, temperature=0.1, json_mode=True,
+                             context={
+                                 "purpose": "conversation_check",
+                                 "source": "regard/regard.py",
+                                 "stage": "judge_talk",
+                                 "route": "judge",
+                             })
         m = re.search(r"\{.*\}", out, re.S)
         moments = json.loads(m.group(0)).get("moments", []) if m else []
     except (RuntimeError, ValueError):
@@ -1819,7 +1837,14 @@ def process_chat(changes, judge, meta):
                                      lines="\n".join(text))
         for _ in range(2):
             try:
-                out = judge.chat([{"role": "user", "content": prompt}], 900, temperature=0.1, json_mode=True)
+                out = judge.chat([{"role": "user", "content": prompt}], 900, temperature=0.1, json_mode=True,
+                    context={
+                        "purpose": "relationship_analysis",
+                        "source": "regard",
+                        "stage": "chat.score",
+                        "route": "judge",
+                        "attempt": _ + 1,
+                    })
             except RuntimeError as e:
                 raise JudgeUnreachable(str(e)) from None
             m = re.search(r"\{.*\}", out, re.S)
@@ -1900,7 +1925,17 @@ def describe(meta):
                                         moments="\n".join(f"- {x}" for x in reasons) or "- little of note")
 
         def run(lane, attempt):
-            text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": prompt}], 120, temperature=0.7))
+            text = re.sub(r"\s+", " ", lane.chat([{"role": "user", "content": prompt}], 120, temperature=0.7,
+                context={
+                    "purpose": "relationship_update",
+                    "source": "regard",
+                    "stage": "relationship.describe",
+                    "route": "batch",
+                    "bot": name,
+                    "bot_guid": bot,
+                    "job_id": f"regard-{bot}-{other}",
+                    "attempt": attempt,
+                }))
             text = text.strip().strip('"').translate(ASCII_PUNCT)
             if not text.lower().startswith("you") or len(text.split()) > 45:
                 raise ValueError(f"unusable sentence: {text[:60]!r}")

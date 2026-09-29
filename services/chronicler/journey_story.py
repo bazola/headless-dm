@@ -326,7 +326,13 @@ def write_chapter(prompt, e, known, lanes, judge, step=None):
     for attempt in range(1, MAX_ATTEMPTS + 1):
         lane = attempt_on(lanes, attempt)
         try:
-            body = clean(lane.chat(messages, CHAPTER_TOKENS, temperature=0.85))
+            body = clean(lane.chat(messages, CHAPTER_TOKENS, temperature=0.85,
+                context={
+                    "purpose": "journey_story",
+                    "source": "chronicler/journey_story.py",
+                    "stage": "write_chapter",
+                    "route": "batch",
+                }))
             check_words(body, e)
             if len(body.split()) < int(CHAPTER_WORDS[0] * 0.6):
                 raise ValueError("too short")

@@ -19,6 +19,7 @@ The project site, with screenshots and transcripts: **https://bazola.github.io/h
 |---|---|
 | `docs/GUIDE.md` | The setup runbook — 13 phases, each with a gate and a check |
 | `docs/EXTENDING.md` | How to build on it |
+| `docs/accounting.md` | Optional model request accounting and dashboard export |
 | `services/` | The Python services: lore, regard, chronicler, economy, router, memory |
 | `ops/` | Bootstrap, build, systemd units, database and config tooling |
 | `sql/` | Schema for our own tables, era overlays and world overlays |

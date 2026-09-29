@@ -177,7 +177,13 @@ def lore_prompt(ctx, e):
 
 
 def write_lore(lane, attempt, e, judge, ctx, store):
-    data = gb.extract_json(lane.chat([{"role": "user", "content": lore_prompt(ctx, e)}], 1400, temperature=0.85))
+    data = gb.extract_json(lane.chat([{"role": "user", "content": lore_prompt(ctx, e)}], 1400, temperature=0.85,
+        context={
+            "purpose": "guild_founding",
+            "source": "regard/founding.py",
+            "stage": "write_lore",
+            "route": "batch",
+        }))
     history, charter, motto = (rivalry.clean(data.get(k)) for k in ("history", "charter", "motto"))
     names = {m["name"] for m in ctx["members"]} | {ctx["founder"]["name"]}
     roles = {k: rivalry.clean(v) for k, v in (data.get("member_roles") or {}).items() if isinstance(v, str) and k in names}

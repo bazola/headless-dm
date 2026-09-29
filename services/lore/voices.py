@@ -229,7 +229,13 @@ Example (for someone else): A man's voice, weathered, deep and gravelly, with a 
     last = None
     for _ in range(3):
         try:
-            text = lane.chat([{"role": "user", "content": prompt}], 120, temperature=0.9)
+            text = lane.chat([{"role": "user", "content": prompt}], 120, temperature=0.9,
+                context={
+                    "purpose": "voice_suggestion",
+                    "source": "lore/voices.py",
+                    "stage": "suggest",
+                    "route": "batch",
+                })
         except RuntimeError as err:
             last = err
             continue

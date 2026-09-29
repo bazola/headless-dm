@@ -23,6 +23,7 @@ import time
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
+from uuid import uuid4
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # ---------------------------------------------------------------- CONFIG --
@@ -36,6 +37,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.realpath(__file__)))))
 from common import fleet_config as _fleet  # noqa: E402
+from accounting.recorder import record_attempt  # noqa: E402
 
 _CFG = _fleet.load()
 _ROUTER = _fleet.router(_CFG)
@@ -91,7 +93,7 @@ def now_iso():
 def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
-def call_backend(backend, messages, opts):
+def call_backend(backend, messages, opts, context=None):
     suffix = backend.get("system_suffix")
     if suffix:
         # Copy so the suffix never leaks into the next backend on failover.
@@ -129,15 +131,18 @@ def call_backend(backend, messages, opts):
                                  headers={"Content-Type": "application/json"})
     if backend.get("key"):
         req.add_header("Authorization", f"Bearer {backend['key']}")
-    with urllib.request.urlopen(req, timeout=backend["timeout"]) as resp:
-        out = json.loads(resp.read().decode())
-    content = out["choices"][0]["message"]["content"] or ""
-    return THINK_RE.sub("", content).strip()
+    with record_attempt(backend["model"], context) as attempt:
+        with urllib.request.urlopen(req, timeout=backend["timeout"]) as resp:
+            out = json.loads(resp.read().decode())
+        attempt.result = out
+        content = out["choices"][0]["message"]["content"] or ""
+        return THINK_RE.sub("", content).strip()
 
 def route_call(route_name, messages, opts):
     backends = ROUTES.get(route_name) or ROUTES[DEFAULT_ROUTE]
     errors = []
-    for b in backends:
+    parent_id = uuid4().hex
+    for number, b in enumerate(backends, 1):
         name = b['url'].split('/v1')[0]
         sem = b.get("sem")
         t0 = time.time()
@@ -147,7 +152,12 @@ def route_call(route_name, messages, opts):
             continue
         waited = int((time.time()-t0)*1000)
         try:
-            text = call_backend(b, messages, opts)
+            raw_context = opts.get("hdm_context")
+            context = dict(raw_context) if isinstance(raw_context, dict) else {}
+            context.setdefault("purpose", "chat_generation")
+            context.setdefault("source", "router")
+            context.update(route=route_name, parent_id=parent_id, attempt=number)
+            text = call_backend(b, messages, opts, context)
             log(f"route={route_name} backend={name} "
                 f"ok {int((time.time()-t0)*1000)}ms (queued {waited}ms) {len(text)}ch")
             return text
@@ -224,6 +234,7 @@ class Handler(BaseHTTPRequestHandler):
         route = body.get("model") or DEFAULT_ROUTE
         opts = dict(body.get("options") or {})
         opts["format"] = body.get("format")
+        opts["hdm_context"] = body.get("hdm_context") or {}
         messages = []
         if body.get("system"):
             messages.append({"role": "system", "content": body["system"]})
@@ -238,6 +249,7 @@ class Handler(BaseHTTPRequestHandler):
         route = body.get("model") or DEFAULT_ROUTE
         opts = dict(body.get("options") or {})
         opts["format"] = body.get("format")
+        opts["hdm_context"] = body.get("hdm_context") or {}
         messages = body.get("messages") or []
         text = route_call(route, messages, opts)
         self._send(200, {"model": route, "created_at": now_iso(),
@@ -249,7 +261,8 @@ class Handler(BaseHTTPRequestHandler):
         route = body.get("model") or DEFAULT_ROUTE
         opts = {"temperature": body.get("temperature"),
                 "top_p": body.get("top_p"),
-                "num_predict": body.get("max_tokens")}
+                "num_predict": body.get("max_tokens"),
+                "hdm_context": body.get("hdm_context")}
         text = route_call(route, body.get("messages") or [], opts)
         self._send(200, {
             "id": "router-1", "object": "chat.completion",

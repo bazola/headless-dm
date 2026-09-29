@@ -260,7 +260,13 @@ def quest_rows(e, args):
 
 def build(lane, e, title, objective):
     prompt = PROMPT.format(setting=e["setting"], limits=e["limits"], title=title, objective=objective)
-    text = lane.chat([{"role": "user", "content": prompt}], 120, temperature=0.85)
+    text = lane.chat([{"role": "user", "content": prompt}], 120, temperature=0.85,
+        context={
+            "purpose": "quest_words",
+            "source": "lore/gen_quest_words.py",
+            "stage": "build",
+            "route": "batch",
+        })
     return clean(text)
 
 
