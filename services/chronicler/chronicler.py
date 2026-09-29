@@ -22,6 +22,7 @@ Usage:
   python3 chronicler.py facts [--watch ...] [--faction A|H]   the reports only, no model calls
   python3 chronicler.py spread [--dry-run]                     carry every tale that is due one stop further
   python3 chronicler.py snapshot                               rewrite chronicle.json
+  python3 chronicler.py rumours                                rewrite rumours.json (where tales went, who passed them on)
   write and facts take --personal: the personal edition of each player's own characters instead of the factions;
   write --since "2026-09-14 00" writes every closed watch from then on.
 Kill switch: `systemctl --user stop wow-chronicler`, or create /opt/wow/chronicler/PAUSE.
@@ -45,6 +46,7 @@ sys.path.insert(0, os.path.join(_SERVICES, "regard"))
 import era as eras  # noqa: E402
 import fleet  # noqa: E402
 import regard as rg  # noqa: E402  (database helpers, people, lands, company names)
+import overheard  # noqa: E402  (the dashboard's Rumours: where tales went, and who passed them on)
 
 # Where this realm lives comes from site/, with the live server config as the fallback (plan 23 W1).
 sys.path.insert(0, _SERVICES)
@@ -52,6 +54,7 @@ from common import site  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SNAPSHOT = os.path.join(site.get("DATA_DIR", "/opt/wow/server/data"), "dashboard-data", "chronicle.json")
+RUMOURS = os.path.join(os.path.dirname(SNAPSHOT), "rumours.json")
 PAUSE_FILE = os.path.join(HERE, "PAUSE")
 
 # The realm's first day, for the chronicle's "day N" titles (plan 23 W9). From site.env, because a realm
@@ -1285,6 +1288,15 @@ def snapshot():
     return len(entries) + len(personal)
 
 
+def rumour_snapshot():
+    """rumours.json: every story of the last few days with where each telling went, and the chat that passed it on.
+    Rewritten every cycle, not only when a watch is written: the evidence grows with the chat."""
+    companies = {w for n in rg.company_names().values() for w in overheard.words(n)}
+    doc = overheard.build(sql, place_name, side_of, NEIGHBOURS, names_in, PLACE_WORDS | companies, COMMON, rg.HORDE)
+    overheard.write(RUMOURS, doc)
+    return doc
+
+
 # ---------------------------------------------------------------------------
 
 def written():
@@ -1359,6 +1371,7 @@ def main():
             p.add_argument("--open", action="store_true", help="write a watch that has not closed yet, up to now")
             p.add_argument("--since", help='"YYYY-MM-DD HH": every closed watch from then on')
     sub.add_parser("snapshot")
+    sub.add_parser("rumours")
     args = ap.parse_args()
     if args.cmd == "run":
         args.personal = True
@@ -1368,6 +1381,12 @@ def main():
         migrate()
     if args.cmd == "snapshot":
         print(f"{snapshot()} entries")
+        return 0
+    if args.cmd == "rumours":
+        t0 = time.time()
+        st = rumour_snapshot()["stats"]
+        print(f"{st.get('passed', 0)} passed on, {st.get('echo', 0)} echoed (chance: {st.get('chance')}) "
+              f"in {time.time() - t0:.1f}s")
         return 0
 
     if args.cmd == "facts":
@@ -1437,6 +1456,10 @@ def main():
                     snapshot()
             except Exception as ex:
                 log(f"cycle failed: {type(ex).__name__}: {ex}")
+            try:
+                rumour_snapshot()
+            except Exception as ex:
+                log(f"rumours snapshot failed: {type(ex).__name__}: {ex}")
         time.sleep(max(30, args.interval - (time.time() - t0)))
 
 
