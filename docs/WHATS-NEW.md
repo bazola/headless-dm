@@ -1,24 +1,16 @@
-# What is on `develop`
+# What is new since the setup runbook
 
-> This branch runs ahead of `main`. It is not released and not merged: `main` is still the version the
-> setup runbook was written against, and nothing here changes how a realm is installed. Everything on
-> this branch is additive — a realm built from `main` keeps working exactly as it did, and every new
-> key below defaults to off or is ignored by an older worldserver.
-
-Read `docs/GUIDE.md` for setting a realm up in the first place. This page only says what is **new here**
-and how to run it.
-
-## Getting this branch
+Everything below is on `main` (merged 2026-09-29; there is no longer a separate `develop` branch). It is all
+additive: a realm set up by `docs/GUIDE.md` keeps working exactly as it did, and every new key defaults to off
+or is ignored by an older worldserver. Read the GUIDE to set a realm up in the first place; this page says what
+arrived after it was written and how to run it.
 
 ```bash
-git clone --recursive -b develop https://github.com/bazola/headless-dm.git
+git clone --recursive https://github.com/bazola/headless-dm.git
 ```
 
-The `mod-dashboard` submodule is pinned on this branch to **its own `develop` commit**, so a recursive
-clone gets the dashboard's half of the journey stories and the voices with it. `.gitmodules` still names `main` as
-that submodule's branch, which is right for `main` and wrong here: `git submodule update --remote`
-would walk the dashboard back to `main` and the Stories button would vanish. Use plain
-`git submodule update`, which follows the pin.
+Every submodule is pinned to its own `main` (or, for the forks, `custom-wow`) commit, as `.gitmodules` names
+them, so `git submodule update --remote` and plain `git submodule update` now agree.
 
 ---
 
@@ -176,7 +168,7 @@ Then restart the lore gate. **Download needs `ffmpeg`** on the server (`sudo apt
 
 ## 5. New configuration keys
 
-In `conf/mod_ollama_chat.overrides`. All of them are ignored by a worldserver built from `main`, so the
+In `conf/mod_ollama_chat.overrides`. All of them are ignored by a worldserver built before these features, so the
 conf is safe to carry either way.
 
 | Key | What it does |
@@ -192,7 +184,7 @@ A conf change needs `.ollama reload` on the worldserver console, except where th
 
 ---
 
-## 6. Also on this branch
+## 6. Also new
 
 - `services/lore/era.py` — a few more later-age names the era gate should catch.
 - `services/lore/gen_places.py` — the place almanac's generator, considerably extended.
@@ -207,3 +199,17 @@ A conf change needs `.ollama reload` on the worldserver console, except where th
   twice from two sides rather than once.
 - The scribe is handed raw party chat, so an odd line is occasionally paraphrased oddly.
 - There is no link from a story back to the stretch of the record it was written from.
+
+## 8. Also new since the last section was written
+
+- **Model costs, per purpose** (`docs/accounting.md`, contributed in #1): an optional recorder at the router
+  and batch lanes, a `wow-accounting` exporter, and the dashboard's **Costs** page. `ACCOUNTING_ENABLED=1` in
+  `site/site.env`; for OpenRouter, give each backend `usage = { include = true }` in its `extra_body` so the
+  provider reports what each call cost.
+- **Every model call can be rented**: `[aliases]` in `fleet.toml` send a name the code uses to one of your
+  backends, and the batch lanes and judges carry the API key, so a realm with no local hardware needs no code
+  change (`site.example/fleet.toml`).
+- **Rumours**: `chronicler.py rumours` writes `rumours.json` for the dashboard's **Rumours** panel, where
+  each recent story went and the chat that carried it, inferred with a chance control.
+- **Memory notes**: `services/memory/scrub_notes.py` (dry run by default) removes stored notes that were the
+  memory prompt handed back rather than anything that happened.
