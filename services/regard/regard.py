@@ -97,6 +97,7 @@ SPEAKER_SHARE = 0.6          # how far a speaker's own tone moves their feeling 
 DECAY_PER_DAY = 0.98         # share of the distance from baseline kept per day
 DESCRIBE_AFTER = 20.0        # rewrite a bot's sentence once the feeling has moved this far
 DESCRIBE_PER_CYCLE = 30
+ANCHOR_FAMILIARITY = 3       # moments a bot must share with a player's main before it keeps its progression
 CHAT_SETTLE_SECONDS = 60     # younger lines wait: the conversation may still be going
 CHAT_BATCH = 600
 EVENT_BATCH = 5000
@@ -1887,6 +1888,32 @@ FORGET_SCORE = 3.0         # a stranger felt this faintly about ...
 FORGET_DAYS = 7            # ... and not met again for this long is forgotten (plan 18 P8a: presence makes many)
 
 
+def anchors(table="acore_playerbots.playerbots_bot_anchor"):
+    """Who keeps their progression (mod-playerbots `AiPlayerbot.PersistentProgression = 2`): every random bot that has
+    shared ANCHOR_FAMILIARITY moments with a player's main, anchored to the main it knows best, whose level it then
+    follows. Mains only: person_kind counts the service accounts' characters (MERCHANTS) as players too, and a bot
+    who knows an auctioneer must not be held to a level-1 clerk.
+    The table is shared: the module records 'meeting' anchors itself (AnchorOnMeeting) and an operator may add
+    'manual' ones. This writer owns only its 'regard' rows: it drops those that no longer qualify, adds new ones,
+    and moves one to a better-known main, but never touches another writer's row, and a bot someone else anchored
+    first stays theirs. The module creates the table (and its `source` column) on its first start with the
+    update; until then there is nothing to fill."""
+    if not int(sql("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = 'acore_playerbots' "
+                   "AND table_name = 'playerbots_bot_anchor' AND column_name = 'source'")[0][0]):
+        return None
+    wanted = ("SELECT bot_guid, other_guid FROM (SELECT r.bot_guid, r.other_guid, ROW_NUMBER() OVER ("
+              "PARTITION BY r.bot_guid ORDER BY r.familiarity DESC, r.other_guid) AS n FROM regard r "
+              "JOIN person_kind b ON b.guid = r.bot_guid AND b.kind = 'bot' "
+              "JOIN person_kind m ON m.guid = r.other_guid AND m.kind = 'main' "
+              f"WHERE r.familiarity >= {ANCHOR_FAMILIARITY}) t WHERE n = 1")
+    sql(f"START TRANSACTION; "
+        f"DELETE a FROM {table} a LEFT JOIN ({wanted}) w ON w.bot_guid = a.bot "
+        f"WHERE a.source = 'regard' AND w.bot_guid IS NULL; "
+        f"INSERT INTO {table} (bot, anchor, source) SELECT w.bot_guid, w.other_guid, 'regard' FROM ({wanted}) w "
+        f"ON DUPLICATE KEY UPDATE anchor = IF(source = 'regard', w.other_guid, anchor); COMMIT;", fetch=False)
+    return int(sql(f"SELECT COUNT(*) FROM {table}")[0][0])
+
+
 def decay():
     sql("UPDATE regard SET score = baseline + (score - baseline) * "
         f"POW({DECAY_PER_DAY}, TIMESTAMPDIFF(MINUTE, decayed_at, NOW()) / 1440.0), decayed_at = NOW() "
@@ -2929,6 +2956,7 @@ def cycle(args, judge, meta):
 
     decay()
     decay_influence()
+    n_anchors = anchors()
     reckoned = reckon(incidents, names)
     n_incidents = commit_incidents(incidents, args.era)
     described = 0 if args.no_words else describe(meta)
@@ -2951,7 +2979,7 @@ def cycle(args, judge, meta):
         f"{'founding started for ' + str(founding) + '; ' if founding else ''}chat {n_lines} lines in {n_convs} conversations -> "
         f"{n_moments} moments, {n_chat} changes; {described} sentences written; snapshot {shown} people; "
         f"companies: {deeds} deeds in {n_influence} lands, {n_incidents} incidents; chat file {chat_lines} lines; "
-        f"memories file {n_memories} rows"
+        f"memories file {n_memories} rows; anchors {'no table' if n_anchors is None else n_anchors}"
         + (f"; journeys {n_journeys} rewritten" if n_journeys is not None else "")
         + (f", {reckoned} lands reckoned" if reckoned else ""))
 

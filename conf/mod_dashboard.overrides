@@ -3,6 +3,6 @@
 # next run. ${PLACEHOLDERS} are filled in by ops/scripts/conf-apply.py from site/.
 Dashboard.Bind = ${DASHBOARD_BIND}
 Dashboard.Port = ${DASHBOARD_PORT}
-Dashboard.MapRoot = ${DATA_DIR}/dashboard-maps
 Dashboard.CommandToken = ${REDACTED}
+Dashboard.MapRoot = ${DATA_DIR}/dashboard-maps
 Dashboard.DataRoot = ${DATA_DIR}/dashboard-data

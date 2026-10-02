@@ -39,6 +39,9 @@ SITE = {
     "OllamaChat.Url": "${ROUTER_URL}",
     "OllamaChat.MaxConcurrentQueries": "${CHAT_CONCURRENCY}",
     "OllamaChat.RAGDataPath": "${DATA_DIR}/ollama-rag/",
+    # The era is a site fact too (plan 23 W8), and these two must follow it even while it equals the .dist's.
+    "OllamaChat.Places.Era": "${ERA}",
+    "OllamaChat.QuestWords.Era": "${ERA}",
 }
 
 
