@@ -8,6 +8,10 @@ For each conf/<name>.overrides:
   * if the live <name>.conf is missing, start from the installed <name>.conf.dist;
   * replace each key's line in place, or append it if the .dist has never heard of it -- our own modules
     add keys (Regard, Chronicle, Company) that no .dist carries;
+  * add, with the .dist's own value, any key a newer .dist has that the live conf does not mention at all.
+    The conf is copied from its .dist once, so a key a module adds later never reaches it otherwise, and the
+    worldserver warns "Missing property" for each at every boot. A key the live file has commented out is
+    the operator's choice and is left alone;
   * fill ${PLACEHOLDERS} from site/site.env and site/secrets.env, and rebuild the database strings and
     tokens that conf-overrides.py wrote as ${REDACTED};
   * back the live file up first, beside it, with a timestamp.
@@ -91,7 +95,7 @@ def apply_file(overrides, etc, dry):
     if live is None:
         live = next((p for p in candidates if os.path.exists(p + ".dist")), None)
     if live is None:
-        return name, [], [f"neither {name}.conf nor {name}.conf.dist exists in {etc} or {etc}/modules"]
+        return name, [], [], [f"neither {name}.conf nor {name}.conf.dist exists in {etc} or {etc}/modules"]
     dist = live + ".dist"
 
     wanted, unresolved = {}, []
@@ -107,7 +111,7 @@ def apply_file(overrides, etc, dry):
         else:
             wanted[m.group(1)] = got
     if unresolved:
-        return name, [], [f"cannot resolve: {', '.join(unresolved)} — set them in site/ and run again"]
+        return name, [], [], [f"cannot resolve: {', '.join(unresolved)} — set them in site/ and run again"]
 
     source = live if os.path.exists(live) else dist
     lines = open(source, encoding="utf-8", errors="replace").read().splitlines(keepends=True)
@@ -138,7 +142,26 @@ def apply_file(overrides, etc, dry):
             lines.append(f"{k} = {wanted[k]}\n")
         changed += missing
 
-    if changed and not dry:
+    added = []
+    if source == live and os.path.exists(dist):
+        mentioned = set(wanted)
+        for raw in lines:
+            m = LINE.match(raw.lstrip().lstrip("#").lstrip())
+            if m:
+                mentioned.add(m.group(1))
+        new = {}
+        for raw in open(dist, encoding="utf-8", errors="replace"):
+            m = None if raw.lstrip().startswith("#") else LINE.match(raw)
+            if m and m.group(1) not in mentioned and m.group(1) not in new:
+                new[m.group(1)] = m.group(2)
+        if new:
+            lines.append(f"\n# new in {os.path.basename(dist)}, added with its default by conf-apply.py "
+                         f"{dt.date.today().isoformat()}\n")
+            for k, v in new.items():
+                lines.append(f"{k} = {v}\n")
+            added = list(new)
+
+    if (changed or added) and not dry:
         if os.path.exists(live):
             stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
             shutil.copy2(live, f"{live}.{stamp}.bak")
@@ -146,7 +169,7 @@ def apply_file(overrides, etc, dry):
         with open(live, "w", encoding="utf-8") as fh:
             fh.writelines(lines)
         os.chmod(live, 0o640)
-    return name, changed, []
+    return name, changed, added, []
 
 
 def main():
@@ -162,13 +185,18 @@ def main():
         name = os.path.basename(path)[: -len(".overrides")]
         if only and name not in only:
             continue
-        name, changed, errs = apply_file(path, args.etc, args.dry_run)
+        name, changed, added, errs = apply_file(path, args.etc, args.dry_run)
         problems += [f"{name}: {e}" for e in errs]
+        if added:
+            # Each takes the .dist's default, which is what the worldserver was already falling back to
+            # when the key was missing -- unless the two disagree, which only the module's code can say.
+            print(f"{name}: {len(added)} new .dist key(s) {'would be added' if args.dry_run else 'added'}: "
+                  f"{', '.join(added)}")
         if changed:
             print(f"{name}: {len(changed)} key(s) {'would change' if args.dry_run else 'changed'}")
             for k in changed:
                 (reload_keys if RELOADABLE.match(k) else restart_keys).append(f"{name}.{k}")
-        elif not errs:
+        elif not errs and not added:
             print(f"{name}: already matches")
 
     if reload_keys and not restart_keys:
