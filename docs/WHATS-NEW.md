@@ -213,3 +213,17 @@ A conf change needs `.ollama reload` on the worldserver console, except where th
   each recent story went and the chat that carried it, inferred with a chance control.
 - **Memory notes**: `services/memory/scrub_notes.py` (dry run by default) removes stored notes that were the
   memory prompt handed back rather than anything that happened.
+- **Settings panel** (mod-dashboard, contributed in #3; `SETTINGS.md` in the module): the dashboard can show
+  and change an explicit allowlist of conf keys, grouped per module file, with type and range rules checked
+  by the worldserver. Off until `Dashboard.Settings.*` names some keys. A key that holds a token, password,
+  secret, API key or database login is refused even if listed. If your confs come from `conf/*.overrides`,
+  record a change there too, or the next `conf-apply.py` undoes it.
+- **Server tab** (mod-dashboard, contributed in #4; `CONTROL.md` in the module): the standalone host can show
+  realm status and start/stop it through a separate management service. Hidden unless `DASHBOARD_CONTROL_*`
+  is set; no backend for the systemd units of the GUIDE ships yet.
+- **Conversation mode and multi-line replies** (mod-ollama-chat, contributed in #1; `CONVERSATION.md` in the
+  module): a bot spoken to face to face can stop and keep its attention on you
+  (`OllamaChat.Conversation.*`), a long reply can go out as several paced lines (`OllamaChat.Delivery.*`),
+  and replies to a real player can use their own model (`OllamaChat.Reply.*`). Every one defaults to off.
+  `Delivery.Split` turns one reply into two or three chat events, so per-line measurements shift with it.
+  New source files: re-run cmake before building.
