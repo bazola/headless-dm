@@ -56,7 +56,7 @@ if [ "$USER_MODE" = "1" ]; then
   SRC="$REPO/ops/user-units"
   DEST="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
   UNITS=(wow-regard.service wow-chronicler.service wow-market.service wow-lore-gate.service
-         wow-memory-archive.service wow-backup.service wow-accounting.service)
+         wow-memory-archive.service wow-backup.service wow-accounting.service wow-dm.service)
   EXTRA=(wow-backup.timer)
 else
   # A dry run reads templates and writes nothing, so it has no business demanding root: the whole point
@@ -97,7 +97,7 @@ echo "installed $(ls -1 "$tmp" | wc -l) unit(s) into $DEST"
 if [ "$USER_MODE" = "1" ]; then
   systemctl --user daemon-reload
   echo "enable what you want running, for example:"
-  echo "  systemctl --user enable --now wow-regard wow-chronicler wow-lore-gate wow-market wow-memory-archive"
+  echo "  systemctl --user enable --now wow-regard wow-chronicler wow-lore-gate wow-market wow-memory-archive wow-dm"
   echo "  systemctl --user enable --now wow-backup.timer"
   echo "and, so they survive a reboot without you logging in:  loginctl enable-linger $USER"
 else

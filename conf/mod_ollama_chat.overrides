@@ -146,3 +146,6 @@ OllamaChat.Places.Enable = 1
 OllamaChat.Places.Era = ${ERA}
 OllamaChat.QuestWords.Enable = 1
 OllamaChat.QuestWords.Era = ${ERA}
+OllamaChat.Director.Enable = 1
+OllamaChat.Director.BossScene = 1
+OllamaChat.Director.InnScene = 1

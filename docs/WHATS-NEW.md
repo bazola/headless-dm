@@ -227,3 +227,37 @@ A conf change needs `.ollama reload` on the worldserver console, except where th
   and replies to a real player can use their own model (`OllamaChat.Reply.*`). Every one defaults to off.
   `Delivery.Split` turns one reply into two or three chat events, so per-line measurements shift with it.
   New source files: re-run cmake before building.
+
+## 9. The Dungeon Master, phase 1: a boss and an innkeeper who know you
+
+A new service, `services/dm/dm.py`, writes what the world will say ahead of the moment it is said, and
+mod-ollama-chat speaks it from an NPC when the moment comes (`mod-ollama-chat_director.cpp`). The service never
+decides *when*; the worldserver never waits on a model. Two scenes so far, both triggered only by real players
+(bots and alts never set one off):
+
+- **The final boss** of a dungeon calls out to the party as they come into sight of it, once per instance: who
+  they are, whether it has met any of them before (and how that went — runs that fell or fled count too), what
+  the realm says of them. A companion answers. The line is written when the party enters (mod-ledger's new
+  `instance_enter` event) and is ready long before they reach the last room. `dm.py boss-words` writes
+  party-free fallback lines per final boss, so the C++ half works with no service running.
+- **An innkeeper** passes on the talk of the zone, and what the land says of the player, when a player walks up
+  to any innkeeper in a zone they have just come into.
+
+Each line spoken is recorded in the ledger as `dm_scene`; the dashboard's **DM** panel (mod-dashboard) shows
+runs, inn lines, what was said and what was missed (`dm.py` writes `dm.json` every minute).
+
+```bash
+mysql acore_characters < services/dm/dm_tables.sql
+python3 services/dm/dm.py boss-words          # once: the fallback lines
+python3 services/dm/dm.py try --map 36 --party <guid>,<guid>   # a party line printed, never stored
+ops/systemd/install.sh --user && systemctl --user enable --now wow-dm
+```
+
+Then in `mod_ollama_chat.conf`: `OllamaChat.Director.Enable = 1`, and `.BossScene` / `.InnScene` for the scenes
+you want (all default `0`; range, cooldown and wording keys are documented in the `.dist`). Site keys
+`DM_BOSS_CHANCE` and `DM_INN_CHANCE` (percent, default 100) thin them out. Kill switch: stop `wow-dm`, create
+`services/dm/PAUSE`, or set `Director.Enable = 0`. New source files in two modules: re-run cmake before building.
+
+`services/regard/areas.py` now also answers *where a point is* from the extracted `.map` terrain files
+(`creature.zoneId` is 0 on every spawn unless the core was booted to calculate it), and reads its files from
+`DATA_DIR` rather than a fixed path.

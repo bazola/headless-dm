@@ -1,0 +1,10 @@
+[Unit]
+Description=Dungeon Master: writes what the world says, and to whom, ahead of the moment (plans/62)
+
+[Service]
+ExecStart=/usr/bin/python3 @REPO@/services/dm/dm.py run --interval 10
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target
