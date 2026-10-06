@@ -261,3 +261,11 @@ you want (all default `0`; range, cooldown and wording keys are documented in th
 `services/regard/areas.py` now also answers *where a point is* from the extracted `.map` terrain files
 (`creature.zoneId` is 0 on every spawn unless the core was booted to calculate it), and reads its files from
 `DATA_DIR` rather than a fixed path.
+
+**After the first playtest** (all automatic, no new keys except one optional):
+- A companion answering a boss is told the boss is alive and the fight has not begun, and a reply that reports the
+  boss dead is dropped: a party that had killed it before answered its taunt with "...lies cold".
+- A scene is remembered by the party it was spoken to, not by every bot in range.
+- The chronicler no longer tells an ordinary elite killed inside a dungeon as a deed (they are the trash).
+- `[judge] fallback` in `fleet.toml` (optional): a second backend for the era judge, asked when the first refuses.
+- `dm.py` notices when the core hands a new run an instance id an earlier run had.

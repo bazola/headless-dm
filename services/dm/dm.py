@@ -481,9 +481,18 @@ def party_lines(map_id, instance, guids, cue_id, dry_run, judge, label):
         log(f"{label}: no final boss known for map {map_id}")
         return False
 
-    # A corpse run back in is the same run: the instance already has its words.
-    done = {int(r[0]) for r in sql(f"SELECT DISTINCT speaker_entry FROM dm_line WHERE scene = {q(SCENE)} "
-                                   f"AND instance_id = {instance} AND expires_at > NOW()")}
+    # A corpse run back in is the same run: the instance already has its words. But the core hands out the
+    # lowest free instance id, so the same number comes round again (plan 62 playtest: instance 1). It is the
+    # same run only if those words were written for someone in this party, and none of them has killed that
+    # boss since; otherwise it is a new run, and the old words go (stale_lines) before new ones are written.
+    party_json = "JSON_ARRAY(" + ",".join(map(str, guids)) + ")"
+    killers = ",".join(map(str, guids))
+    done = {int(r[0]) for r in sql(
+        f"SELECT DISTINCT l.speaker_entry FROM dm_line l WHERE l.scene = {q(SCENE)} AND l.instance_id = {instance} "
+        f"AND l.map_id = {map_id} AND l.expires_at > NOW() AND JSON_OVERLAPS(l.audience, {party_json}) "
+        "AND NOT EXISTS (SELECT 1 FROM ledger_event k WHERE k.event_type = 'kill' AND k.ts > l.made_at "
+        f"AND k.map_id = {map_id} AND k.actor_guid IN ({killers}) "
+        "AND k.detail LIKE '{%' AND JSON_EXTRACT(k.detail, '$.entry') = l.speaker_entry)")}
     bosses = [b for b in bosses if b["entry"] not in done]
     if not bosses:
         return False
@@ -518,7 +527,11 @@ def party_lines(map_id, instance, guids, cue_id, dry_run, judge, label):
             f"{len(wants)} goal(s)" if wants else ""])) or "who they are"
         if dry_run:
             continue
-        audience = "JSON_ARRAY(" + ",".join(map(str, guids)) + ")"
+        # An earlier run's words for this instance number. The module reads `rank`, then id, so they would
+        # be spoken ahead of these.
+        sql(f"UPDATE dm_line SET expires_at = NOW() WHERE scene = {q(SCENE)} AND instance_id = {instance} "
+            f"AND speaker_entry = {boss['entry']} AND expires_at > NOW()", fetch=False)
+        audience = party_json
         rows = ",".join(f"({q(SCENE)}, {instance}, {map_id}, {boss['entry']}, {audience}, {q(line)}, {q(why)}, {i}, "
                         f"{int(cue_id) if cue_id else 'NULL'}, {q(model)}, NOW() + INTERVAL {PARTY_LINE_HOURS} HOUR)"
                         for i, line in enumerate(lines))

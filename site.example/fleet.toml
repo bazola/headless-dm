@@ -99,5 +99,6 @@ lanes = ["local"]
 # when it cannot be reached the callers fall back to their regex and say so once.
 [judge]
 backend = "local"
+# fallback = "remote"   # optional: a second backend asked when the judge refuses (a rented one answers 429)
 slots = 3
 timeout = 60

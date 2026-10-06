@@ -120,6 +120,14 @@ KILL_WORDS = {1: "a fearsome foe", 2: "a rare and fearsome creature", 3: "a grea
 KILL_WEIGHT = {1: 3, 2: 6, 3: 10, 4: 4}
 STRONGHOLD_WEIGHT = 14        # a delve cleared outranks anything else a watch can hold
 INSTANCE_PLACES = set(rg.lands.INSTANCE_NAMES.values())
+
+
+def trash(rank, boss, place):
+    """Rank 1 is an ELITE, and inside a dungeon an elite is the trash the party walks through: the same
+    reading journey_story.py takes. Told as a deed, it reached an innkeeper as "three times you walked out
+    with that Withered Spearhide's head on your belt" (plan 62 playtest, 2026-10-05). Outside, an elite is
+    still a fearsome thing; a rare elite (2) or a rare (4) counts anywhere."""
+    return not boss and rank == 1 and place in INSTANCE_PLACES
 # mod-ledger writes `"boss":1`. MySQL's JSON comparison keeps integer 1 and boolean true apart, so
 # `JSON_EXTRACT(detail, '$.boss') = true` matches nothing at all -- it only ever looked right here because
 # every boss killed so far was also elite and came in on the rank clause beside it (plans/30 §6).
@@ -384,6 +392,8 @@ def gather(start, end, faction, heard_by=None):
         # is the thing that happened, and three separate kill lines both bury it and crowd the watch.
         if boss and place in INSTANCE_PLACES:
             continue        # told as one delve above
+        if trash(rank, boss, place):
+            continue
         if boss:
             text = (f"{cap(who(d['guids'], people, names, stranger))} slew {foe(name, many(entry))}, the master of "
                     f"{place}{again(d)}.")
@@ -1062,6 +1072,8 @@ def gather_personal(start, end, house):
         more = " more than once" if len(deed["times"]) > 1 else ""
         if deed["boss"] and place in INSTANCE_PLACES:
             continue        # told as one delve below
+        if trash(deed["rank"], deed["boss"], place):
+            continue
         if deed["boss"]:
             text = f"{cap(who(guids, people, names))} slew {foe(deed['name'], many(entry))}, the master of {place}{more}."
         else:

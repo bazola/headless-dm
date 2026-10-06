@@ -194,21 +194,40 @@ class Judge:
         # to BoundedSemaphore is a TypeError rather than a default.
         slots = int(slots or j["slots"])
         self.lane = Lane.of(j, slots, timeout=j["router_timeout"])
+        self.fallback = Lane.of(j["fallback"], slots, timeout=j["router_timeout"]) if j.get("fallback") else None
         self.sem = threading.BoundedSemaphore(slots)
-        self.warned = False
+        self.failures = 0
+
+    def _ask(self, prompt, context):
+        """The verdict text. A refusal (a rented judge answers 429 under load: every party line of the plan 62
+        playtest went out unjudged) is tried once more after a pause, then on [judge] fallback."""
+        messages = [{"role": "user", "content": prompt}]
+        context = context or {"purpose": "lore_validation", "source": "fleet", "stage": "judge.check", "route": "judge"}
+        tries = [(self.lane, 0), (self.lane, 3)] + ([(self.fallback, 0)] if self.fallback else [])
+        error = None
+        for lane, pause in tries:
+            if not lane.available():
+                continue
+            time.sleep(pause)
+            try:
+                return lane.chat(messages, 150, temperature=0.0, json_mode=True, context=context)
+            except Exception as e:
+                error = e
+        raise error or RuntimeError("no judge lane available")
 
     def check(self, prompt, context=None):
         """Evidence string when the text is flagged, else None."""
-        if not self.lane.available():
+        if not self.lane.available() and not (self.fallback and self.fallback.available()):
             return None
         with self.sem:
             try:
-                out = self.lane.chat([{"role": "user", "content": prompt}], 150, temperature=0.0, json_mode=True,
-                                     context=context or {"purpose": "lore_validation", "source": "fleet", "stage": "judge.check", "route": "judge"})
+                out = self._ask(prompt, context)
             except Exception as e:
-                if not self.warned:
-                    print(f"judge unavailable ({e}); outputs pass on the regex alone", flush=True)
-                    self.warned = True
+                # Counted, not said once per process: one line at startup hid a judge that was down all night.
+                self.failures += 1
+                if self.failures in (1, 10, 100) or self.failures % 1000 == 0:
+                    print(f"judge unavailable ({e}); outputs pass on the regex alone "
+                          f"[{self.failures} unjudged so far]", flush=True)
                 return None
         m = re.search(r"\{.*\}", out, re.S)
         try:

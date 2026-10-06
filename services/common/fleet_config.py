@@ -138,6 +138,12 @@ def judge(cfg=None):
     b = backend(j.get("backend") or "local", cfg)
     b["slots"] = int(j.get("slots", 3))
     b["router_timeout"] = b["batch_timeout"] = int(j.get("timeout", 60))
+    # A second backend to ask when the first refuses (a rented model answers 429 under load). Optional.
+    b["fallback"] = None
+    if j.get("fallback"):
+        f = backend(j["fallback"], cfg)
+        f["router_timeout"] = f["batch_timeout"] = b["router_timeout"]
+        b["fallback"] = f
     return b
 
 
